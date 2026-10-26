@@ -1,0 +1,128 @@
+import {
+  IonApp,
+  IonContent,
+  IonIcon,
+  IonLabel,
+  IonPage,
+  IonRouterOutlet,
+  IonSpinner,
+  IonTabBar,
+  IonTabButton,
+  IonTabs,
+  IonText,
+  setupIonicReact,
+} from '@ionic/react';
+import { IonReactHashRouter } from '@ionic/react-router';
+import { cloudUploadOutline, homeOutline, listOutline, settingsOutline, walletOutline } from 'ionicons/icons';
+import { Redirect, Route } from 'react-router-dom';
+import { AuthProvider, useAuth } from './auth/AuthProvider';
+import Placeholder from './components/Placeholder';
+import { HouseholdProvider, useHousehold } from './household/HouseholdProvider';
+import AccountsPage from './pages/AccountsPage';
+import LoginPage from './pages/LoginPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
+import SettingsPage from './pages/SettingsPage';
+import SetupHouseholdPage from './pages/SetupHouseholdPage';
+
+setupIonicReact();
+
+function Loading() {
+  return (
+    <IonPage>
+      <IonContent className="ion-padding">
+        <div className="center">
+          <IonSpinner />
+        </div>
+      </IonContent>
+    </IonPage>
+  );
+}
+
+function MainTabs() {
+  return (
+    <IonReactHashRouter>
+      <IonTabs>
+        <IonRouterOutlet>
+          <Route exact path="/overview">
+            <Placeholder title="Overview">
+              <p>Cash flow, spending by category and net worth arrive in Phase 4.</p>
+            </Placeholder>
+          </Route>
+          <Route exact path="/transactions">
+            <Placeholder title="Transactions">
+              <p>Transactions appear here once CSV import is built (Phase 2).</p>
+            </Placeholder>
+          </Route>
+          <Route exact path="/import">
+            <Placeholder title="Import">
+              <p>CSV import with preview and duplicate detection is Phase 2.</p>
+            </Placeholder>
+          </Route>
+          <Route exact path="/accounts" component={AccountsPage} />
+          <Route exact path="/settings" component={SettingsPage} />
+          <Route exact path="/">
+            <Redirect to="/accounts" />
+          </Route>
+        </IonRouterOutlet>
+        <IonTabBar slot="bottom">
+          <IonTabButton tab="overview" href="/overview">
+            <IonIcon icon={homeOutline} />
+            <IonLabel>Overview</IonLabel>
+          </IonTabButton>
+          <IonTabButton tab="transactions" href="/transactions">
+            <IonIcon icon={listOutline} />
+            <IonLabel>Transactions</IonLabel>
+          </IonTabButton>
+          <IonTabButton tab="import" href="/import">
+            <IonIcon icon={cloudUploadOutline} />
+            <IonLabel>Import</IonLabel>
+          </IonTabButton>
+          <IonTabButton tab="accounts" href="/accounts">
+            <IonIcon icon={walletOutline} />
+            <IonLabel>Accounts</IonLabel>
+          </IonTabButton>
+          <IonTabButton tab="settings" href="/settings">
+            <IonIcon icon={settingsOutline} />
+            <IonLabel>Settings</IonLabel>
+          </IonTabButton>
+        </IonTabBar>
+      </IonTabs>
+    </IonReactHashRouter>
+  );
+}
+
+function SignedIn() {
+  const { loading, error, household } = useHousehold();
+  if (loading && !household) return <Loading />;
+  if (error)
+    return (
+      <IonPage>
+        <IonContent className="ion-padding">
+          <IonText color="danger">{error}</IonText>
+        </IonContent>
+      </IonPage>
+    );
+  return household ? <MainTabs /> : <SetupHouseholdPage />;
+}
+
+function Gate() {
+  const { session, loading, recovering } = useAuth();
+  if (loading) return <Loading />;
+  if (!session) return <LoginPage />;
+  if (recovering) return <ResetPasswordPage />;
+  return (
+    <HouseholdProvider>
+      <SignedIn />
+    </HouseholdProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <IonApp>
+      <AuthProvider>
+        <Gate />
+      </AuthProvider>
+    </IonApp>
+  );
+}

@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches-ignore: [main] # main is covered by deploy.yml, which calls this workflow
+  pull_request:
+  workflow_call:
+
+jobs:
+  app:
+    name: Typecheck, unit tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  database:
+    name: Migrations and access-control tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Start local Supabase (applies all migrations)
+        run: npm run db:start
+      - name: Run pgTAP tests
+        run: npm run db:test
+      - name: Check generated types are up to date
+        run: |
+          npm run -s db:types
+          git diff --exit-code src/lib/database.types.ts

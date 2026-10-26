@@ -1,0 +1,41 @@
+:root {
+  --ion-color-primary: #0f5d6e;
+  --ion-color-primary-rgb: 15, 93, 110;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #0d5261;
+  --ion-color-primary-tint: #276d7d;
+}
+
+/* Keep forms readable on wide (desktop) screens. */
+.narrow {
+  max-width: 420px;
+  margin: 8vh auto 0;
+}
+
+ion-list.list-inset {
+  max-width: 720px;
+}
+
+@media (min-width: 768px) {
+  /* !important: Ionic's own .list-md.list-inset margin rule is more specific. */
+  ion-list.list-inset {
+    margin-inline: auto !important;
+  }
+}
+
+.muted {
+  color: var(--ion-color-medium);
+  font-weight: normal;
+}
+
+.hint {
+  font-size: 0.85rem;
+  margin: 8px 0;
+}
+
+.center {
+  display: flex;
+  justify-content: center;
+  padding-top: 20vh;
+}

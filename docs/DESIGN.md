@@ -1,6 +1,6 @@
 # Cascade Finance — Design Document
 
-> Living document. Status: **v0.3 draft — under discussion, no code yet.**
+> Living document. Status: **v0.4 — Phase 1 (foundation) implemented; Phase 2 (import) next.**
 > Update this file whenever a decision is made or reversed; record it in the Decision Log (§11).
 
 ---
@@ -226,7 +226,7 @@ Model:
 | Phase | Scope |
 |---|---|
 | 0 — Design | This document; collect sample exports from every account; settle open questions. |
-| 1 — Foundation | Supabase project, migrations, auth, household + RLS, accounts CRUD. |
+| 1 — Foundation ✅ | Supabase project, migrations, auth, household + RLS, accounts CRUD, CI/deploy. |
 | 2 — Import | USAA format, parser, preview, dedup RPC, import history, invariants as automated tests. |
 | 3 — Categorise | Category tree, rules engine, manual edit, bulk recategorise, transfer matching. |
 | 4 — Overview | Transactions list (search/filter), monthly cash flow, spending by category, balances, net worth. |
@@ -234,6 +234,18 @@ Model:
 | 5a — Shared expenses | `is_shared`, split ratio, joint contributions, settlement balance. |
 | 6 — Budgets & trends | After ~2–3 months of categorised data: per-category monthly targets vs actuals; recurring-charge detection. |
 | 7 — Mobile polish | PWA install, offline read cache, phone-first import flow. (No separate native app planned.) |
+
+## 10a. Implementation status
+
+**Phase 1 (done):**
+- Migration `supabase/migrations/20261026000001_foundation.sql`: `households`, `household_members` (with `split_weight`), `accounts`, private `imports` Storage bucket, RLS on all of them, RPCs `create_household` and `add_household_member`.
+- Deviation from §6: `institutions` is a free-text column on `accounts` for now, and the split ratio is stored as per-member `split_weight` (share = weight / sum of weights) rather than a single household ratio. This generalises cleanly and makes 50/50 the default (equal weights).
+- One household per user (unique index). Sufficient for this household; lift if ever needed.
+- Import archive bucket is append-only from the client (select + insert policies only).
+- Tests: 26 pgTAP access-control tests (`supabase/tests/database/`), verified to fail when an RLS policy is weakened; 24 Vitest unit tests (money parsing, account grouping, split maths).
+- App: login, password reset, household setup, add partner, accounts CRUD (grouped Cash / Credit / Loans), split setting, placeholder tabs for later phases. Hash-based routing (GitHub Pages has no SPA fallback); PKCE auth flow so reset links do not collide with hash routes.
+- CI: typecheck, unit tests, build, migrations + pgTAP on local Supabase, generated-types drift check. Deploy on `main`: CI → `supabase db push` → GitHub Pages.
+- Not yet automated: browser end-to-end tests (Playwright). Phase 1 flows were verified manually with a Playwright script against local Supabase (two users, household creation, partner add, split change persisted, shared account visible to partner); to be committed as a CI suite in Phase 2.
 
 ## 11. Open questions
 
@@ -264,3 +276,6 @@ Model:
 | 2026-10-26 | Joint checking modelled as pass-through; transfer chains collapsed; contributions not scored | Joint account barely used for spending | Accepted |
 | 2026-10-26 | Credit card importers deferred until samples available | Samples unavailable for now | Accepted |
 | 2026-10-26 | Member-to-member transfers default to settlement | Household: usually paybacks | Accepted |
+| 2026-10-26 | Schema deployed automatically from `main` via GitHub Actions (`supabase db push`) | Household preference; keeps DB and code in lockstep | Accepted |
+| 2026-10-26 | Public GitHub repo; GitHub Pages hosting | Household preference; no data in repo | Accepted |
+| 2026-10-26 | Split stored as per-member weights | Generalises the configurable 50/50 default | Accepted |
