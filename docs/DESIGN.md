@@ -217,7 +217,7 @@ Model:
   - Transfer matching must handle **chains** (personal A → joint → personal B, possibly a few days apart), not only direct pairs. A chain is collapsed into one logical transfer A → B.
   - The rare expense paid directly from joint is shared by definition and creates no debt.
   - Contributions into joint are **not** scored as "paying more" by themselves; only the money's final destination matters.
-- **Settlements**: a logical transfer from one member's personal account to the other's (direct or via joint) is proposed as a settlement; the user confirms or marks it as something else (e.g. a gift). Explicit manual settlement entries are also allowed.
+- **Settlements**: a logical transfer from one member's personal account to the other's (direct or via joint) is proposed as a settlement; it **defaults to accepted** (household confirmed such transfers are usually paybacks); the user can reclassify it (e.g. a gift). Explicit manual settlement entries are also allowed.
 - Output: running balance "Member 1 owes Member 2 $X", per-month breakdown, list of contributing transactions.
 
 
@@ -238,8 +238,7 @@ Model:
 ## 11. Open questions
 
 1. **Credit card samples** (tabled): one export each from Amex, Discover, IKEA card; Member 1's cards, if any.
-2. **Settlement confirmation:** when money moves between members' personal accounts, is it usually a pay-back for shared costs? (Determines whether proposed settlements default to *accept*.)
-3. **Maximum USAA export range:** to be determined empirically by trying the longest custom date range the site allows. Overlapping chunks are safe to import (dedup is order-independent).
+2. **Maximum USAA export range:** to be determined empirically by trying the longest custom date range the site allows. Overlapping chunks are safe to import (dedup is order-independent).
 
 ## 12. Decision log
 
@@ -264,3 +263,4 @@ Model:
 | 2026-10-26 | Shared-expense split default 50/50, configurable | Household preference | Accepted |
 | 2026-10-26 | Joint checking modelled as pass-through; transfer chains collapsed; contributions not scored | Joint account barely used for spending | Accepted |
 | 2026-10-26 | Credit card importers deferred until samples available | Samples unavailable for now | Accepted |
+| 2026-10-26 | Member-to-member transfers default to settlement | Household: usually paybacks | Accepted |
