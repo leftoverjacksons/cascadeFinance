@@ -1,6 +1,6 @@
 # Cascade Finance — Design Document
 
-> Living document. Status: **v0.2 draft — under discussion, no code yet.**
+> Living document. Status: **v0.3 draft — under discussion, no code yet.**
 > Update this file whenever a decision is made or reversed; record it in the Decision Log (§11).
 
 ---
@@ -40,8 +40,11 @@ Motivating problems with the incumbent:
 | Checking (A) | USAA | Member 1 | CSV (`bk_download.csv`) |
 | Checking (B) | USAA | Member 2 | CSV (same format assumed) |
 | Shared checking | USAA | Joint | CSV (same format assumed) |
-| Savings | USAA | TBD | CSV (same format assumed) |
-| Credit cards (several) | TBD (Member 2's issuers pending) | TBD | CSV — formats to be collected |
+| Savings | USAA | Joint | CSV (same format assumed) |
+| Credit card | American Express | Member 2 | CSV — sample pending (tabled) |
+| Credit card | Discover | Member 2 | CSV — sample pending (tabled) |
+| Credit card | IKEA card (issuer TBD) | Member 2 | CSV — sample pending (tabled) |
+| Credit cards (Member 1) | TBD | Member 1 | TBD |
 | Mortgage | TBD | Joint | Probably no transaction export; statement balance + loan terms |
 | Auto loan | Ford Motor Credit (observed in checking payments) | TBD | Same as mortgage |
 
@@ -208,13 +211,15 @@ Goal: tag certain expenses as mutual, see who has paid more, and how large the i
 Model:
 - **Payer** of a transaction is derived from its account: personal account → that member; joint account → the joint pool.
 - **`is_shared`** marks an expense from a personal account as mutual. Rules can set it (e.g. all `Groceries` are shared); it can be toggled per transaction.
-- **Split ratio**: household default (e.g. 50/50, or proportional to income), overridable per transaction.
+- **Split ratio**: household setting, default **50/50**, configurable in settings; overridable per transaction.
 - For each shared expense of amount *A* paid by member *p*: *p* is credited *A × (1 − share_p)* owed by the other member.
-- **Joint account**: expenses paid from it are already shared and do not create a debt. What matters is each member's **contributions** into it (transfers from personal → joint), which are compared against the split ratio.
-- **Settlements**: a transfer between members (or an explicit settlement entry) reduces the balance.
+- **Joint account as pass-through**: in practice the joint checking is used mainly as an intermediary for moving money between accounts, not for spending. Consequences:
+  - Transfer matching must handle **chains** (personal A → joint → personal B, possibly a few days apart), not only direct pairs. A chain is collapsed into one logical transfer A → B.
+  - The rare expense paid directly from joint is shared by definition and creates no debt.
+  - Contributions into joint are **not** scored as "paying more" by themselves; only the money's final destination matters.
+- **Settlements**: a logical transfer from one member's personal account to the other's (direct or via joint) is proposed as a settlement; the user confirms or marks it as something else (e.g. a gift). Explicit manual settlement entries are also allowed.
 - Output: running balance "Member 1 owes Member 2 $X", per-month breakdown, list of contributing transactions.
 
-Open: default split ratio (Q10).
 
 ## 10. Roadmap (phased)
 
@@ -232,13 +237,9 @@ Open: default split ratio (Q10).
 
 ## 11. Open questions
 
-1. **Credit cards:** Member 2's issuers, plus one sample export per issuer.
-2. **Savings ownership:** joint or personal?
-3. **Auth method:** magic link, Google sign-in, or password (whatever LakTrak uses is the default)?
-4. **History depth:** how far back to import initially (USAA sample is ~18 months)?
-5. **Shared-expense split:** 50/50, or proportional to income? Same ratio for everything?
-6. **Joint account contributions:** are both members expected to transfer into the joint account on a schedule, and should that be part of the "who paid more" calculation? (Proposed: yes.)
-7. **Budgeting:** deferred until ~2–3 months of categorised data exist; then start with simple monthly targets per category.
+1. **Credit card samples** (tabled): one export each from Amex, Discover, IKEA card; Member 1's cards, if any.
+2. **Settlement confirmation:** when money moves between members' personal accounts, is it usually a pay-back for shared costs? (Determines whether proposed settlements default to *accept*.)
+3. **Maximum USAA export range:** to be determined empirically by trying the longest custom date range the site allows. Overlapping chunks are safe to import (dedup is order-independent).
 
 ## 12. Decision log
 
@@ -257,3 +258,9 @@ Open: default split ratio (Q10).
 | 2026-10-26 | Original files archived unmodified in Storage; provenance (account, export date, balance at export) in DB + sidecar JSON | Preserves hash/audit integrity; enables balance reconciliation | Accepted |
 | 2026-10-26 | Shared-expense tracking with member balance and settlements is in scope | Household requirement | Accepted |
 | 2026-10-26 | Budgeting deferred until categorised data exist | Household new to budgeting; targets need baseline | Accepted |
+| 2026-10-26 | Savings account is joint | Household answer | Accepted |
+| 2026-10-26 | Auth: email + password (Supabase Auth) | Household preference | Accepted |
+| 2026-10-26 | Import as much history as institutions allow | Household preference; dedup makes chunked/overlapping imports safe | Accepted |
+| 2026-10-26 | Shared-expense split default 50/50, configurable | Household preference | Accepted |
+| 2026-10-26 | Joint checking modelled as pass-through; transfer chains collapsed; contributions not scored | Joint account barely used for spending | Accepted |
+| 2026-10-26 | Credit card importers deferred until samples available | Samples unavailable for now | Accepted |
