@@ -1,0 +1,8 @@
+# Never commit real financial exports. Synthetic test fixtures go in tests/fixtures/.
+*.csv
+*.ofx
+*.qfx
+!tests/fixtures/**/*.csv
+.env
+.env.*
+node_modules/
