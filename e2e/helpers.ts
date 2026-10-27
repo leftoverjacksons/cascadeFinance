@@ -28,8 +28,13 @@ export function activePage(page: Page) {
   return page.locator('ion-router-outlet .ion-page:not(.ion-page-hidden)');
 }
 
+/** Navigation: sidebar on desktop widths, bottom tabs on phones. */
+export function navItem(page: Page, tab: string) {
+  return page.locator(`ion-menu [data-nav=${tab}]:visible, ion-tab-button[tab=${tab}]:visible`).first();
+}
+
 export async function openTab(page: Page, tab: string) {
-  await page.locator(`ion-tab-button[tab=${tab}]`).click();
+  await navItem(page, tab).click();
 }
 
 export async function createHousehold(page: Page, householdName: string, myName: string) {
@@ -37,7 +42,7 @@ export async function createHousehold(page: Page, householdName: string, myName:
   await page.locator('ion-input').nth(0).locator('input').fill(householdName);
   await page.locator('ion-input').nth(1).locator('input').fill(myName);
   await page.getByRole('button', { name: 'Create household' }).click();
-  await expect(page.locator('ion-tab-bar')).toBeVisible();
+  await expect(navItem(page, 'overview')).toBeVisible();
 }
 
 export async function addAccount(page: Page, name: string, institution = 'USAA', type?: string) {
@@ -76,4 +81,14 @@ export async function pickCategory(page: Page, name: string) {
   const picker = page.locator('ion-modal').filter({ has: page.getByTestId('category-picker') }).last();
   await picker.locator('ion-searchbar input').fill(name);
   await picker.getByTestId('category-picker').locator('ion-item', { hasText: name }).first().click();
+}
+
+/** The open transaction detail: side panel on desktop, pop-up on phones. */
+export function transactionDetail(page: Page) {
+  return page.locator('[data-testid=transaction-detail]:visible');
+}
+
+/** Transaction rows (table rows on desktop, list items on phones). */
+export function transactionRows(page: Page) {
+  return page.getByTestId('transactions').locator('[data-txn]');
 }

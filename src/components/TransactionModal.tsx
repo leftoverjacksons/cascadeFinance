@@ -31,13 +31,22 @@ interface Props {
   accountName: string;
   tree: CategoryGroup[];
   byId: Map<string, Category>;
+  /** 'modal' (default) pops up over the page; 'panel' renders inline as a side panel (desktop). */
+  presentation?: 'modal' | 'panel';
   /** changed: this row was saved; rulesChanged: other rows may have been re-categorised too. */
   onClose: (result: { changed: boolean; rulesChanged: boolean }) => void;
 }
 
 const AUTOMATIC = 'automatic';
 
-export default function TransactionModal({ transaction: t, accountName, tree, byId, onClose }: Props) {
+export default function TransactionModal({
+  transaction: t,
+  accountName,
+  tree,
+  byId,
+  presentation = 'modal',
+  onClose,
+}: Props) {
   const { household } = useRequiredHousehold();
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
@@ -123,140 +132,161 @@ export default function TransactionModal({ transaction: t, accountName, tree, by
         : 'Uncategorized (automatic)'
       : categoryLabel(category, byId);
 
-  return (
-    <IonModal isOpen={t !== null} onDidDismiss={() => onClose({ changed: false, rulesChanged: false })}>
-      <IonHeader>
-        <IonToolbar>
-          <IonButtons slot="start">
-            <IonButton onClick={() => onClose({ changed: false, rulesChanged: false })}>Cancel</IonButton>
-          </IonButtons>
-          <IonTitle>Transaction</IonTitle>
-          <IonButtons slot="end">
-            <IonButton strong onClick={() => void save()} disabled={busy || pending}>
-              Save
-            </IonButton>
-          </IonButtons>
-        </IonToolbar>
-      </IonHeader>
-      {t && (
-        <IonContent>
-          <IonList inset>
-            <IonItem>
-              <IonLabel>Amount</IonLabel>
-              <IonNote slot="end" className={t.amount_cents > 0 ? 'credit' : ''}>
-                {formatCents(t.amount_cents)}
-              </IonNote>
-            </IonItem>
-            <IonItem>
-              <IonLabel>Date</IonLabel>
-              <IonNote slot="end">
-                {formatDay(t.posted_on)}
-                {pending && ' (pending)'}
-              </IonNote>
-            </IonItem>
-            <IonItem>
-              <IonLabel>Account</IonLabel>
-              <IonNote slot="end">{accountName}</IonNote>
-            </IonItem>
-            <IonItem>
-              <IonLabel className="ion-text-wrap">
-                <p>Bank description · bank category: {t.bank_category ?? '—'}</p>
-                <h3 className="mono">{t.raw_description}</h3>
-              </IonLabel>
-            </IonItem>
-          </IonList>
+  const header = (
+    <IonHeader>
+      <IonToolbar>
+        <IonButtons slot="start">
+          <IonButton onClick={() => onClose({ changed: false, rulesChanged: false })}>Cancel</IonButton>
+        </IonButtons>
+        <IonTitle>Transaction</IonTitle>
+        <IonButtons slot="end">
+          <IonButton strong onClick={() => void save()} disabled={busy || pending}>
+            Save
+          </IonButton>
+        </IonButtons>
+      </IonToolbar>
+    </IonHeader>
+  );
 
-          <IonList inset>
-            <IonItem button={!pending} detail={!pending} onClick={() => !pending && setPickerOpen(true)} data-testid="category-field">
-              <IonLabel className="ion-text-wrap">
-                <p>Category</p>
-                <h3>{currentLabel}</h3>
-              </IonLabel>
-            </IonItem>
-            {category !== AUTOMATIC && !pending && (
-              <IonItem button detail={false} onClick={() => setCategory(AUTOMATIC)}>
-                <IonLabel color="primary">Reset to automatic (use rules)</IonLabel>
-              </IonItem>
-            )}
-          </IonList>
+  const body = t && (
+    <>
+      <IonList inset>
+        <IonItem>
+          <IonLabel>Amount</IonLabel>
+          <IonNote slot="end" className={t.amount_cents > 0 ? 'credit' : ''}>
+            {formatCents(t.amount_cents)}
+          </IonNote>
+        </IonItem>
+        <IonItem>
+          <IonLabel>Date</IonLabel>
+          <IonNote slot="end">
+            {formatDay(t.posted_on)}
+            {pending && ' (pending)'}
+          </IonNote>
+        </IonItem>
+        <IonItem>
+          <IonLabel>Account</IonLabel>
+          <IonNote slot="end">{accountName}</IonNote>
+        </IonItem>
+        <IonItem>
+          <IonLabel className="ion-text-wrap">
+            <p>Bank description · bank category: {t.bank_category ?? '—'}</p>
+            <h3 className="mono">{t.raw_description}</h3>
+          </IonLabel>
+        </IonItem>
+      </IonList>
 
-          {canMakeRule && categoryChanged && (
-            <IonList inset>
-              <IonListHeader>Apply to similar transactions</IonListHeader>
+      <IonList inset>
+        <IonItem
+          button={!pending}
+          detail={!pending}
+          onClick={() => !pending && setPickerOpen(true)}
+          data-testid="category-field"
+        >
+          <IonLabel className="ion-text-wrap">
+            <p>Category</p>
+            <h3>{currentLabel}</h3>
+          </IonLabel>
+        </IonItem>
+        {category !== AUTOMATIC && !pending && (
+          <IonItem button detail={false} onClick={() => setCategory(AUTOMATIC)}>
+            <IonLabel color="primary">Reset to automatic (use rules)</IonLabel>
+          </IonItem>
+        )}
+      </IonList>
+
+      {canMakeRule && categoryChanged && (
+        <IonList inset>
+          <IonListHeader>Apply to similar transactions</IonListHeader>
+          <IonItem>
+            <IonCheckbox
+              checked={makeRule}
+              onIonChange={(e) => setMakeRule(e.detail.checked)}
+              labelPlacement="end"
+              justify="start"
+            >
+              Create a rule
+            </IonCheckbox>
+          </IonItem>
+          {makeRule && (
+            <>
               <IonItem>
-                <IonCheckbox
-                  checked={makeRule}
-                  onIonChange={(e) => setMakeRule(e.detail.checked)}
-                  labelPlacement="end"
-                  justify="start"
-                >
-                  Create a rule
-                </IonCheckbox>
+                <IonInput
+                  label="When the description contains"
+                  labelPlacement="stacked"
+                  value={pattern}
+                  onIonInput={(e) => setPattern(e.detail.value ?? '')}
+                />
               </IonItem>
-              {makeRule && (
-                <>
-                  <IonItem>
-                    <IonInput
-                      label="When the description contains"
-                      labelPlacement="stacked"
-                      value={pattern}
-                      onIonInput={(e) => setPattern(e.detail.value ?? '')}
-                    />
-                  </IonItem>
-                  <IonItem lines="none">
-                    <IonNote>
-                      {matching === null
-                        ? 'Counting matches…'
-                        : `Matches ${matching} transaction${matching === 1 ? '' : 's'}. Ones you set by hand keep their category.`}
-                    </IonNote>
-                  </IonItem>
-                </>
-              )}
-            </IonList>
+              <IonItem lines="none">
+                <IonNote>
+                  {matching === null
+                    ? 'Counting matches…'
+                    : `Matches ${matching} transaction${matching === 1 ? '' : 's'}. Ones you set by hand keep their category.`}
+                </IonNote>
+              </IonItem>
+            </>
           )}
-
-          <IonList inset>
-            <IonItem>
-              <IonInput
-                label="Name"
-                labelPlacement="stacked"
-                value={name}
-                disabled={pending}
-                onIonInput={(e) => setName(e.detail.value ?? '')}
-              />
-            </IonItem>
-            <IonItem>
-              <IonTextarea
-                label="Notes"
-                labelPlacement="stacked"
-                autoGrow
-                maxlength={1000}
-                value={notes}
-                disabled={pending}
-                onIonInput={(e) => setNotes(e.detail.value ?? '')}
-              />
-            </IonItem>
-          </IonList>
-          {pending && (
-            <IonNote className="ion-padding" style={{ display: 'block' }}>
-              Pending transactions are replaced by the next import, so they can't be edited until
-              they post. Rules still categorise them.
-            </IonNote>
-          )}
-          <CategoryPicker
-            isOpen={pickerOpen}
-            tree={tree}
-            onCancel={() => setPickerOpen(false)}
-            onSelect={(id) => {
-              setPickerOpen(false);
-              if (id) {
-                setCategory(id);
-                setMakeRule(true);
-              }
-            }}
-          />
-        </IonContent>
+        </IonList>
       )}
+
+      <IonList inset>
+        <IonItem>
+          <IonInput
+            label="Name"
+            labelPlacement="stacked"
+            value={name}
+            disabled={pending}
+            onIonInput={(e) => setName(e.detail.value ?? '')}
+          />
+        </IonItem>
+        <IonItem>
+          <IonTextarea
+            label="Notes"
+            labelPlacement="stacked"
+            autoGrow
+            maxlength={1000}
+            value={notes}
+            disabled={pending}
+            onIonInput={(e) => setNotes(e.detail.value ?? '')}
+          />
+        </IonItem>
+      </IonList>
+      {pending && (
+        <IonNote className="ion-padding" style={{ display: 'block' }}>
+          Pending transactions are replaced by the next import, so they can't be edited until they post. Rules still
+          categorise them.
+        </IonNote>
+      )}
+      <CategoryPicker
+        isOpen={pickerOpen}
+        tree={tree}
+        onCancel={() => setPickerOpen(false)}
+        onSelect={(id) => {
+          setPickerOpen(false);
+          if (id) {
+            setCategory(id);
+            setMakeRule(true);
+          }
+        }}
+      />
+    </>
+  );
+
+  if (presentation === 'panel') {
+    if (!t) return null;
+    return (
+      <aside className="side-panel" data-testid="transaction-detail" aria-label="Transaction details">
+        {header}
+        <div className="side-panel-body">{body}</div>
+      </aside>
+    );
+  }
+
+  return (
+    <IonModal data-testid="transaction-detail" isOpen={t !== null} onDidDismiss={() => onClose({ changed: false, rulesChanged: false })}>
+      {header}
+      {body && <IonContent>{body}</IonContent>}
     </IonModal>
   );
 }

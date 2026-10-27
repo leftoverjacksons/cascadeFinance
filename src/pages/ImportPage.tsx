@@ -75,11 +75,7 @@ export default function ImportPage() {
   const balanceValid = balance.trim() === '' || balanceCents !== null;
 
   const loadHistory = useCallback(async () => {
-    const { data } = await supabase
-      .from('imports')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(20);
+    const { data } = await supabase.from('imports').select('*').order('created_at', { ascending: false }).limit(20);
     setHistory(data ?? []);
   }, []);
 
@@ -189,246 +185,250 @@ export default function ImportPage() {
         </IonToolbar>
       </IonHeader>
       <IonContent>
-        {active.length === 0 ? (
-          <div className="ion-padding">
-            <IonText color="medium">Add an account first (Accounts tab).</IonText>
-          </div>
-        ) : (
-          <IonList inset>
-            <IonItem>
-              <IonSelect
-                label="Account"
-                labelPlacement="stacked"
-                placeholder="Choose the account this file is from"
-                value={accountId || undefined}
-                onIonChange={(e) => chooseAccount(e.detail.value as string)}
-              >
-                {active.map((a) => (
-                  <IonSelectOption key={a.id} value={a.id}>
-                    {a.name}
-                  </IonSelectOption>
-                ))}
-              </IonSelect>
-            </IonItem>
-            <IonItem>
-              <IonLabel>
-                <h3>CSV file</h3>
-                <p>{loaded ? loaded.file.name : 'USAA: bk_download.csv'}</p>
-              </IonLabel>
-              <IonButton slot="end" onClick={() => fileInput.current?.click()} disabled={busy}>
-                Choose file
-              </IonButton>
-              <input
-                ref={fileInput}
-                type="file"
-                accept=".csv,text/csv"
-                hidden
-                data-testid="csv-input"
-                onChange={(e) => void onFile(e.target.files?.[0])}
-              />
-            </IonItem>
-            <IonItem>
-              <IonInput
-                label="Exported on"
-                labelPlacement="stacked"
-                type="date"
-                value={exportedOn}
-                onIonInput={(e) => setExportedOn(e.detail.value ?? todayLocal())}
-              />
-            </IonItem>
-            <IonItem>
-              <IonInput
-                label={
-                  accounts.find((a) => a.id === accountId)?.is_liability
-                    ? 'Amount owed when exported (optional)'
-                    : 'Current balance when exported (optional)'
-                }
-                labelPlacement="stacked"
-                inputmode="decimal"
-                placeholder="e.g. 2,431.17"
-                value={balance}
-                onIonInput={(e) => setBalance(e.detail.value ?? '')}
-                className={balanceValid ? '' : 'ion-invalid ion-touched'}
-                errorText="Not a valid amount"
-              />
-            </IonItem>
-          </IonList>
-        )}
-
-        {loaded && (
-          <IonList inset data-testid="preview">
-            <IonListHeader>
-              {loaded.parsed.format.label} · {rows.length} rows
-            </IonListHeader>
-            {!accountId && (
-              <IonItem>
-                <IonText color="warning">Choose the account above to see what is new.</IonText>
-              </IonItem>
-            )}
-            {busy && !preview && (
-              <IonItem>
-                <IonSpinner name="dots" />
-              </IonItem>
-            )}
-            {preview && (
-              <>
+        <div className="import-layout">
+          <div>
+            {active.length === 0 ? (
+              <div className="ion-padding">
+                <IonText color="medium">Add an account first (Accounts tab).</IonText>
+              </div>
+            ) : (
+              <IonList inset>
                 <IonItem>
-                  <IonLabel>New</IonLabel>
-                  <IonBadge color="success">{counts.new - skip.size}</IonBadge>
+                  <IonSelect
+                    label="Account"
+                    labelPlacement="stacked"
+                    placeholder="Choose the account this file is from"
+                    value={accountId || undefined}
+                    onIonChange={(e) => chooseAccount(e.detail.value as string)}
+                  >
+                    {active.map((a) => (
+                      <IonSelectOption key={a.id} value={a.id}>
+                        {a.name}
+                      </IonSelectOption>
+                    ))}
+                  </IonSelect>
                 </IonItem>
                 <IonItem>
-                  <IonLabel>Already imported</IonLabel>
-                  <IonBadge color="medium">{counts.duplicate}</IonBadge>
-                </IonItem>
-                <IonItem>
-                  <IonLabel>Pending (replaces current pending)</IonLabel>
-                  <IonBadge color="warning">{counts.pending}</IonBadge>
-                </IonItem>
-              </>
-            )}
-            {loaded.parsed.errors.length > 0 && (
-              <IonItem>
-                <IonLabel color="danger" className="ion-text-wrap">
-                  <h3>{loaded.parsed.errors.length} unreadable rows will be ignored</h3>
-                  {loaded.parsed.errors.slice(0, 5).map((e) => (
-                    <p key={e.line}>
-                      Line {e.line}: {e.message}
-                    </p>
-                  ))}
-                </IonLabel>
-              </IonItem>
-            )}
-          </IonList>
-        )}
-
-        {suspects.length > 0 && (
-          <IonList inset>
-            <IonListHeader>Possible duplicates ({suspects.length})</IonListHeader>
-            <IonItem lines="none">
-              <IonText color="medium">
-                <p className="hint">
-                  Same amount within 3 days of a transaction already recorded, but described
-                  differently. Tick any that are the same transaction to skip them.
-                </p>
-              </IonText>
-            </IonItem>
-            {suspects.map((p) => {
-              const row = rows[p.ordinal - 1];
-              return (
-                <IonItem key={p.ordinal}>
-                  <IonCheckbox
-                    slot="start"
-                    checked={skip.has(p.ordinal)}
-                    onIonChange={(e) => {
-                      const next = new Set(skip);
-                      if (e.detail.checked) next.add(p.ordinal);
-                      else next.delete(p.ordinal);
-                      setSkip(next);
-                    }}
-                    aria-label="Skip this row"
-                  />
-                  <IonLabel className="ion-text-wrap">
-                    <h3>
-                      {formatDay(row.posted_on)} · {formatCents(row.amount_cents)}
-                    </h3>
-                    <p>New: {row.raw_description}</p>
-                    <p>
-                      Existing ({formatDay(p.suspect!.posted_on)}): {p.suspect!.raw_description}
-                    </p>
-                  </IonLabel>
-                </IonItem>
-              );
-            })}
-          </IonList>
-        )}
-
-        {alreadyImported && (
-          <IonList inset>
-            <IonItem>
-              <IonText color="warning" className="ion-text-wrap">
-                This exact file was already imported into {accountName(accountId)} on{' '}
-                {formatDay(alreadyImported.created_at.slice(0, 10))}.
-              </IonText>
-            </IonItem>
-          </IonList>
-        )}
-
-        {preview && !alreadyImported && (
-          <div className="ion-padding narrow-block">
-            <IonButton
-              expand="block"
-              onClick={() => void doImport()}
-              disabled={busy || !balanceValid || !exportedOn}
-            >
-              {counts.new - skip.size > 0 || counts.pending > 0
-                ? `Import ${counts.new - skip.size} new transactions`
-                : 'Record import (nothing new)'}
-            </IonButton>
-          </div>
-        )}
-
-        {newRows.length > 0 && (
-          <IonList inset>
-            <IonListHeader>New transactions</IonListHeader>
-            {newRows.slice(0, 50).map((p) => {
-              const row = rows[p.ordinal - 1];
-              return (
-                <IonItem key={p.ordinal} className={skip.has(p.ordinal) ? 'skipped' : ''}>
                   <IonLabel>
-                    <h3>{row.display_description ?? row.raw_description}</h3>
-                    <p>{formatDay(row.posted_on)}</p>
+                    <h3>CSV file</h3>
+                    <p>{loaded ? loaded.file.name : 'USAA: bk_download.csv'}</p>
                   </IonLabel>
-                  <IonNote slot="end" className={row.amount_cents > 0 ? 'credit' : ''}>
-                    {formatCents(row.amount_cents)}
-                  </IonNote>
+                  <IonButton slot="end" onClick={() => fileInput.current?.click()} disabled={busy}>
+                    Choose file
+                  </IonButton>
+                  <input
+                    ref={fileInput}
+                    type="file"
+                    accept=".csv,text/csv"
+                    hidden
+                    data-testid="csv-input"
+                    onChange={(e) => void onFile(e.target.files?.[0])}
+                  />
                 </IonItem>
-              );
-            })}
-            {newRows.length > 50 && (
-              <IonItem>
-                <IonNote>…and {newRows.length - 50} more</IonNote>
-              </IonItem>
+                <IonItem>
+                  <IonInput
+                    label="Exported on"
+                    labelPlacement="stacked"
+                    type="date"
+                    value={exportedOn}
+                    onIonInput={(e) => setExportedOn(e.detail.value ?? todayLocal())}
+                  />
+                </IonItem>
+                <IonItem>
+                  <IonInput
+                    label={
+                      accounts.find((a) => a.id === accountId)?.is_liability
+                        ? 'Amount owed when exported (optional)'
+                        : 'Current balance when exported (optional)'
+                    }
+                    labelPlacement="stacked"
+                    inputmode="decimal"
+                    placeholder="e.g. 2,431.17"
+                    value={balance}
+                    onIonInput={(e) => setBalance(e.detail.value ?? '')}
+                    className={balanceValid ? '' : 'ion-invalid ion-touched'}
+                    errorText="Not a valid amount"
+                  />
+                </IonItem>
+              </IonList>
             )}
-          </IonList>
-        )}
 
-        {result && (
-          <IonList inset data-testid="import-result">
-            <IonListHeader>Import complete</IonListHeader>
-            <IonItem>
-              <IonLabel className="ion-text-wrap">
-                {result.rows_inserted} added · {result.rows_duplicate} already present ·{' '}
-                {result.rows_skipped} skipped ·{' '}
-                {result.pending_replaced
-                  ? `${result.rows_pending} pending`
-                  : 'pending rows ignored (a newer export was already imported)'}
-              </IonLabel>
-            </IonItem>
-          </IonList>
-        )}
+            {loaded && (
+              <IonList inset data-testid="preview">
+                <IonListHeader>
+                  {loaded.parsed.format.label} · {rows.length} rows
+                </IonListHeader>
+                {!accountId && (
+                  <IonItem>
+                    <IonText color="warning">Choose the account above to see what is new.</IonText>
+                  </IonItem>
+                )}
+                {busy && !preview && (
+                  <IonItem>
+                    <IonSpinner name="dots" />
+                  </IonItem>
+                )}
+                {preview && (
+                  <>
+                    <IonItem>
+                      <IonLabel>New</IonLabel>
+                      <IonBadge color="success">{counts.new - skip.size}</IonBadge>
+                    </IonItem>
+                    <IonItem>
+                      <IonLabel>Already imported</IonLabel>
+                      <IonBadge color="medium">{counts.duplicate}</IonBadge>
+                    </IonItem>
+                    <IonItem>
+                      <IonLabel>Pending (replaces current pending)</IonLabel>
+                      <IonBadge color="warning">{counts.pending}</IonBadge>
+                    </IonItem>
+                  </>
+                )}
+                {loaded.parsed.errors.length > 0 && (
+                  <IonItem>
+                    <IonLabel color="danger" className="ion-text-wrap">
+                      <h3>{loaded.parsed.errors.length} unreadable rows will be ignored</h3>
+                      {loaded.parsed.errors.slice(0, 5).map((e) => (
+                        <p key={e.line}>
+                          Line {e.line}: {e.message}
+                        </p>
+                      ))}
+                    </IonLabel>
+                  </IonItem>
+                )}
+              </IonList>
+            )}
 
-        {history.length > 0 && (
-          <IonList inset>
-            <IonListHeader>Recent imports</IonListHeader>
-            {history.map((h) => (
-              <IonItem key={h.id}>
-                <IonLabel className="ion-text-wrap">
-                  <h3>{accountName(h.account_id)}</h3>
-                  <p>
-                    {h.original_filename} · exported {formatDay(h.exported_on)}
-                    {h.date_min && h.date_max && ` · covers ${h.date_min} to ${h.date_max}`}
-                  </p>
-                  <p>
-                    {h.rows_inserted} added, {h.rows_duplicate} duplicates, {h.rows_skipped} skipped,{' '}
-                    {h.rows_pending} pending
-                    {h.balance_at_export_cents !== null &&
-                      ` · balance ${formatCents(h.balance_at_export_cents)}`}
-                  </p>
-                </IonLabel>
-              </IonItem>
-            ))}
-          </IonList>
-        )}
+            {suspects.length > 0 && (
+              <IonList inset>
+                <IonListHeader>Possible duplicates ({suspects.length})</IonListHeader>
+                <IonItem lines="none">
+                  <IonText color="medium">
+                    <p className="hint">
+                      Same amount within 3 days of a transaction already recorded, but described differently. Tick any
+                      that are the same transaction to skip them.
+                    </p>
+                  </IonText>
+                </IonItem>
+                {suspects.map((p) => {
+                  const row = rows[p.ordinal - 1];
+                  return (
+                    <IonItem key={p.ordinal}>
+                      <IonCheckbox
+                        slot="start"
+                        checked={skip.has(p.ordinal)}
+                        onIonChange={(e) => {
+                          const next = new Set(skip);
+                          if (e.detail.checked) next.add(p.ordinal);
+                          else next.delete(p.ordinal);
+                          setSkip(next);
+                        }}
+                        aria-label="Skip this row"
+                      />
+                      <IonLabel className="ion-text-wrap">
+                        <h3>
+                          {formatDay(row.posted_on)} · {formatCents(row.amount_cents)}
+                        </h3>
+                        <p>New: {row.raw_description}</p>
+                        <p>
+                          Existing ({formatDay(p.suspect!.posted_on)}): {p.suspect!.raw_description}
+                        </p>
+                      </IonLabel>
+                    </IonItem>
+                  );
+                })}
+              </IonList>
+            )}
+
+            {alreadyImported && (
+              <IonList inset>
+                <IonItem>
+                  <IonText color="warning" className="ion-text-wrap">
+                    This exact file was already imported into {accountName(accountId)} on{' '}
+                    {formatDay(alreadyImported.created_at.slice(0, 10))}.
+                  </IonText>
+                </IonItem>
+              </IonList>
+            )}
+
+            {preview && !alreadyImported && (
+              <div className="ion-padding narrow-block">
+                <IonButton
+                  expand="block"
+                  onClick={() => void doImport()}
+                  disabled={busy || !balanceValid || !exportedOn}
+                >
+                  {counts.new - skip.size > 0 || counts.pending > 0
+                    ? `Import ${counts.new - skip.size} new transactions`
+                    : 'Record import (nothing new)'}
+                </IonButton>
+              </div>
+            )}
+
+            {result && (
+              <IonList inset data-testid="import-result">
+                <IonListHeader>Import complete</IonListHeader>
+                <IonItem>
+                  <IonLabel className="ion-text-wrap">
+                    {result.rows_inserted} added · {result.rows_duplicate} already present · {result.rows_skipped}{' '}
+                    skipped ·{' '}
+                    {result.pending_replaced
+                      ? `${result.rows_pending} pending`
+                      : 'pending rows ignored (a newer export was already imported)'}
+                  </IonLabel>
+                </IonItem>
+              </IonList>
+            )}
+          </div>
+          <div>
+            {newRows.length > 0 && (
+              <IonList inset>
+                <IonListHeader>New transactions</IonListHeader>
+                {newRows.slice(0, 50).map((p) => {
+                  const row = rows[p.ordinal - 1];
+                  return (
+                    <IonItem key={p.ordinal} className={skip.has(p.ordinal) ? 'skipped' : ''}>
+                      <IonLabel>
+                        <h3>{row.display_description ?? row.raw_description}</h3>
+                        <p>{formatDay(row.posted_on)}</p>
+                      </IonLabel>
+                      <IonNote slot="end" className={row.amount_cents > 0 ? 'credit' : ''}>
+                        {formatCents(row.amount_cents)}
+                      </IonNote>
+                    </IonItem>
+                  );
+                })}
+                {newRows.length > 50 && (
+                  <IonItem>
+                    <IonNote>…and {newRows.length - 50} more</IonNote>
+                  </IonItem>
+                )}
+              </IonList>
+            )}
+
+            {history.length > 0 && (
+              <IonList inset>
+                <IonListHeader>Recent imports</IonListHeader>
+                {history.map((h) => (
+                  <IonItem key={h.id}>
+                    <IonLabel className="ion-text-wrap">
+                      <h3>{accountName(h.account_id)}</h3>
+                      <p>
+                        {h.original_filename} · exported {formatDay(h.exported_on)}
+                        {h.date_min && h.date_max && ` · covers ${h.date_min} to ${h.date_max}`}
+                      </p>
+                      <p>
+                        {h.rows_inserted} added, {h.rows_duplicate} duplicates, {h.rows_skipped} skipped,{' '}
+                        {h.rows_pending} pending
+                        {h.balance_at_export_cents !== null && ` · balance ${formatCents(h.balance_at_export_cents)}`}
+                      </p>
+                    </IonLabel>
+                  </IonItem>
+                ))}
+              </IonList>
+            )}
+          </div>
+        </div>
       </IonContent>
     </IonPage>
   );

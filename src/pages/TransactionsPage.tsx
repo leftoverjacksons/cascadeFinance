@@ -33,6 +33,7 @@ import { formatDay } from '../domain/dates';
 import { formatCents } from '../domain/money';
 import { useAccounts } from '../household/useAccounts';
 import { useCategories } from '../household/useCategories';
+import { useIsDesktop } from '../layout/useMediaQuery';
 import type { Database } from '../lib/database.types';
 import { supabase } from '../lib/supabase';
 
@@ -58,29 +59,36 @@ export default function TransactionsPage() {
   const [bulkPickerOpen, setBulkPickerOpen] = useState(false);
   const [toast] = useIonToast();
   const requestId = useRef(0);
+  const isDesktop = useIsDesktop();
+  // Desktop table sorting. Pending rows stay on top only for newest-first.
+  const [sort, setSort] = useState<{ key: 'date' | 'amount'; asc: boolean }>({ key: 'date', asc: false });
 
   const fetchPage = useCallback(
     async (offset: number) => {
-      let q = supabase
-        .from('transactions')
-        .select('*')
-        // Pending first, then newest first; id breaks ties so paging is stable.
-        .order('status', { ascending: false })
-        .order('posted_on', { ascending: false })
-        .order('id')
-        .range(offset, offset + PAGE - 1);
+      let q = supabase.from('transactions').select('*');
+      if (sort.key === 'date') {
+        // Pending first (newest-first only), then by date; id keeps paging stable.
+        if (!sort.asc) q = q.order('status', { ascending: false });
+        q = q.order('posted_on', { ascending: sort.asc });
+      } else {
+        q = q.order('amount_cents', { ascending: sort.asc });
+      }
+      q = q.order('id').range(offset, offset + PAGE - 1);
       if (accountId !== ALL) q = q.eq('account_id', accountId);
       if (categoryFilter === UNCATEGORIZED) q = q.is('category_id', null);
       else if (categoryFilter !== ALL) {
         // A group filter includes its categories.
-        const ids = [categoryFilter, ...[...byId.values()].filter((c) => c.parent_id === categoryFilter).map((c) => c.id)];
+        const ids = [
+          categoryFilter,
+          ...[...byId.values()].filter((c) => c.parent_id === categoryFilter).map((c) => c.id),
+        ];
         q = q.in('category_id', ids);
       }
       const term = search.trim().replace(/[%_,()]/g, ' ');
       if (term) q = q.or(`display_description.ilike.%${term}%,raw_description.ilike.%${term}%`);
       return q;
     },
-    [accountId, categoryFilter, search, byId],
+    [accountId, categoryFilter, search, byId, sort],
   );
 
   const reload = useCallback(async () => {
@@ -139,6 +147,25 @@ export default function TransactionsPage() {
   }
 
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? '';
+
+  function onRowClick(t: Transaction) {
+    if (!selecting) return setSelected(t);
+    const next = new Set(checked);
+    if (next.has(t.id)) next.delete(t.id);
+    else next.add(t.id);
+    setChecked(next);
+  }
+
+  function closeDetail({ changed, rulesChanged }: { changed: boolean; rulesChanged: boolean }) {
+    setSelected(null);
+    if (changed || rulesChanged) void reload();
+  }
+
+  function sortBy(key: 'date' | 'amount') {
+    setSort((s) => (s.key === key ? { key, asc: !s.asc } : { key, asc: key === 'amount' }));
+  }
+  const sortMark = (key: 'date' | 'amount') => (sort.key === key ? (sort.asc ? ' ▲' : ' ▼') : '');
+  const ariaSort = (key: 'date' | 'amount') => (sort.key === key ? (sort.asc ? 'ascending' : 'descending') : undefined);
   const showAccount = accountId === ALL && accounts.length > 1;
   const filterLabel =
     categoryFilter === ALL
@@ -168,117 +195,164 @@ export default function TransactionsPage() {
         <IonRefresher slot="fixed" onIonRefresh={(e) => void reload().then(() => e.detail.complete())}>
           <IonRefresherContent />
         </IonRefresher>
-        <IonList inset>
-          <IonItem>
-            <IonSelect
-              label="Account"
-              value={accountId}
-              onIonChange={(e) => setAccountId(e.detail.value as string)}
-            >
-              <IonSelectOption value={ALL}>All accounts</IonSelectOption>
-              {accounts.map((a) => (
-                <IonSelectOption key={a.id} value={a.id}>
-                  {a.name}
-                </IonSelectOption>
-              ))}
-            </IonSelect>
-          </IonItem>
-          <IonItem button detail onClick={() => setFilterPickerOpen(true)} data-testid="category-filter">
-            <IonLabel>Category</IonLabel>
-            <IonNote slot="end">{filterLabel}</IonNote>
-          </IonItem>
-          {categoryFilter !== ALL && (
-            <IonItem button detail={false} onClick={() => setCategoryFilter(ALL)}>
-              <IonLabel color="primary">Clear category filter</IonLabel>
-            </IonItem>
-          )}
-        </IonList>
-        {error && (
-          <IonText color="danger">
-            <p className="ion-padding">{error}</p>
-          </IonText>
-        )}
-        {rows.length === 0 && !error && (
-          <IonText color="medium">
-            <p className="ion-padding">No transactions match.</p>
-          </IonText>
-        )}
-        <IonList inset data-testid="transactions">
-          {rows.map((t, i) => {
-            const header =
-              t.status === 'pending'
-                ? i === 0 && 'Pending'
-                : (i === 0 || rows[i - 1].posted_on !== t.posted_on || rows[i - 1].status === 'pending') &&
-                  formatDay(t.posted_on);
-            const isChecked = checked.has(t.id);
-            return (
-              <Fragment key={t.id}>
-                {header && <IonItemDivider>{header}</IonItemDivider>}
-                <IonItem
-                  button
-                  detail={false}
-                  onClick={() => {
-                    if (!selecting) return setSelected(t);
-                    const next = new Set(checked);
-                    if (isChecked) next.delete(t.id);
-                    else next.add(t.id);
-                    setChecked(next);
-                  }}
+        <div className={isDesktop ? 'txn-layout' : undefined}>
+          <div className="txn-main">
+            <IonList inset className={isDesktop ? 'txn-filters' : undefined}>
+              <IonItem>
+                <IonSelect
+                  label="Account"
+                  value={accountId}
+                  onIonChange={(e) => setAccountId(e.detail.value as string)}
                 >
-                  {selecting && <IonCheckbox slot="start" checked={isChecked} aria-label="Select" />}
-                  <IonLabel>
-                    <h3>{t.display_description}</h3>
-                    <p className={t.category_id ? '' : 'uncategorized'}>
-                      {[showAccount && accountName(t.account_id), categoryLabel(t.category_id, byId)]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </p>
-                  </IonLabel>
-                  {t.status === 'pending' && (
-                    <IonBadge slot="end" color="warning">
-                      Pending
-                    </IonBadge>
-                  )}
-                  <IonNote slot="end" className={t.amount_cents > 0 ? 'credit amount' : 'amount'}>
-                    {formatCents(t.amount_cents)}
-                  </IonNote>
+                  <IonSelectOption value={ALL}>All accounts</IonSelectOption>
+                  {accounts.map((a) => (
+                    <IonSelectOption key={a.id} value={a.id}>
+                      {a.name}
+                    </IonSelectOption>
+                  ))}
+                </IonSelect>
+              </IonItem>
+              <IonItem button detail onClick={() => setFilterPickerOpen(true)} data-testid="category-filter">
+                <IonLabel>Category</IonLabel>
+                <IonNote slot="end">{filterLabel}</IonNote>
+              </IonItem>
+              {categoryFilter !== ALL && (
+                <IonItem button detail={false} onClick={() => setCategoryFilter(ALL)}>
+                  <IonLabel color="primary">Clear category filter</IonLabel>
                 </IonItem>
-              </Fragment>
-            );
-          })}
-        </IonList>
-        <IonInfiniteScroll
-          disabled={done}
-          onIonInfinite={(e) => void loadMore().then(() => e.target.complete())}
-        >
-          <IonInfiniteScrollContent />
-        </IonInfiniteScroll>
+              )}
+            </IonList>
+            {error && (
+              <IonText color="danger">
+                <p className="ion-padding">{error}</p>
+              </IonText>
+            )}
+            {rows.length === 0 && !error && (
+              <IonText color="medium">
+                <p className="ion-padding">No transactions match.</p>
+              </IonText>
+            )}
+            {isDesktop ? (
+              <table className="data-table txn-table txn-table-full" data-testid="transactions">
+                <thead>
+                  <tr>
+                    {selecting && <th aria-label="Selected" />}
+                    <th aria-sort={ariaSort('date')}>
+                      <button className="sort" onClick={() => sortBy('date')}>
+                        Date{sortMark('date')}
+                      </button>
+                    </th>
+                    <th>Description</th>
+                    <th>Category</th>
+                    <th>Account</th>
+                    <th aria-sort={ariaSort('amount')}>
+                      <button className="sort" onClick={() => sortBy('amount')}>
+                        Amount{sortMark('amount')}
+                      </button>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((t) => (
+                    <tr
+                      key={t.id}
+                      data-txn={t.id}
+                      className={`clickable${selected?.id === t.id ? ' selected' : ''}`}
+                      onClick={() => onRowClick(t)}
+                    >
+                      {selecting && (
+                        <td>
+                          <IonCheckbox checked={checked.has(t.id)} aria-label="Select" />
+                        </td>
+                      )}
+                      <td>
+                        {t.status === 'pending' ? <IonBadge color="warning">Pending</IonBadge> : formatDay(t.posted_on)}
+                      </td>
+                      <td className="txn-name">{t.display_description}</td>
+                      <td className={t.category_id ? '' : 'uncategorized'}>{categoryLabel(t.category_id, byId)}</td>
+                      <td>{accountName(t.account_id)}</td>
+                      <td className={t.amount_cents > 0 ? 'credit amount' : 'amount'}>{formatCents(t.amount_cents)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <IonList inset data-testid="transactions">
+                {rows.map((t, i) => {
+                  const header =
+                    t.status === 'pending'
+                      ? i === 0 && 'Pending'
+                      : (i === 0 || rows[i - 1].posted_on !== t.posted_on || rows[i - 1].status === 'pending') &&
+                        formatDay(t.posted_on);
+                  const isChecked = checked.has(t.id);
+                  return (
+                    <Fragment key={t.id}>
+                      {header && <IonItemDivider>{header}</IonItemDivider>}
+                      <IonItem button detail={false} onClick={() => onRowClick(t)} data-txn={t.id}>
+                        {selecting && <IonCheckbox slot="start" checked={isChecked} aria-label="Select" />}
+                        <IonLabel>
+                          <h3 className="txn-name">{t.display_description}</h3>
+                          <p className={t.category_id ? '' : 'uncategorized'}>
+                            {[showAccount && accountName(t.account_id), categoryLabel(t.category_id, byId)]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </p>
+                        </IonLabel>
+                        {t.status === 'pending' && (
+                          <IonBadge slot="end" color="warning">
+                            Pending
+                          </IonBadge>
+                        )}
+                        <IonNote slot="end" className={t.amount_cents > 0 ? 'credit amount' : 'amount'}>
+                          {formatCents(t.amount_cents)}
+                        </IonNote>
+                      </IonItem>
+                    </Fragment>
+                  );
+                })}
+              </IonList>
+            )}
+            <IonInfiniteScroll disabled={done} onIonInfinite={(e) => void loadMore().then(() => e.target.complete())}>
+              <IonInfiniteScrollContent />
+            </IonInfiniteScroll>
+          </div>
+          {isDesktop &&
+            (selected ? (
+              <TransactionModal
+                presentation="panel"
+                transaction={selected}
+                accountName={accountName(selected.account_id)}
+                tree={tree}
+                byId={byId}
+                onClose={closeDetail}
+              />
+            ) : (
+              <aside className="side-panel side-panel-empty" aria-label="Transaction details">
+                <p className="caption">Select a transaction to see and edit its details.</p>
+              </aside>
+            ))}
+        </div>
       </IonContent>
       {selecting && (
         <IonFooter>
           <IonToolbar>
             <IonButtons slot="end">
-              <IonButton
-                strong
-                disabled={checked.size === 0}
-                onClick={() => setBulkPickerOpen(true)}
-              >
+              <IonButton strong disabled={checked.size === 0} onClick={() => setBulkPickerOpen(true)}>
                 Categorize {checked.size}
               </IonButton>
             </IonButtons>
           </IonToolbar>
         </IonFooter>
       )}
-      <TransactionModal
-        transaction={selected}
-        accountName={selected ? accountName(selected.account_id) : ''}
-        tree={tree}
-        byId={byId}
-        onClose={({ changed, rulesChanged }) => {
-          setSelected(null);
-          if (changed || rulesChanged) void reload();
-        }}
-      />
+      {!isDesktop && (
+        <TransactionModal
+          transaction={selected}
+          accountName={selected ? accountName(selected.account_id) : ''}
+          tree={tree}
+          byId={byId}
+          onClose={closeDetail}
+        />
+      )}
       <CategoryPicker
         isOpen={filterPickerOpen}
         tree={tree}

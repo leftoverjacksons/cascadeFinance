@@ -1,6 +1,6 @@
 # Cascade Finance — Design Document
 
-> Living document. Status: **v0.7 — Phases 1–4 implemented (foundation, import, categorisation, overview); next: 5 (more formats) / 5a (shared expenses).**
+> Living document. Status: **v0.8 — Phases 1–4 implemented, plus desktop workspace; next: 5a (shared expenses) / 5 (more formats).**
 > Update this file whenever a decision is made or reversed; record it in the Decision Log (§11).
 
 ---
@@ -280,6 +280,16 @@ Model:
 - Tests: 12 new pgTAP tests (100 total); 9 new unit tests; new Playwright overview scenario (statement balance, net worth, table expansion, period switch).
 - Deferred: the planned balance *reconciliation* check between consecutive exports; per-category drill-down into the transaction list.
 
+**Desktop / responsive layout (done):**
+- Primary target is a desktop browser (household uses an ultrawide monitor); phones must stay fully usable and fast.
+- Breakpoints: < 768 px phone (single column, bottom tabs); 768–1199 px tablet (two-column stacked panels, bottom tabs); ≥ 1200 px desktop (left sidebar via `IonSplitPane`, tab bar hidden).
+- **Overview workspace (desktop):** each chart/table is a panel on a 12-column snap grid (react-grid-layout 1.5). Default: summary tiles across the top, then two half-width panels per row. Panels can be dragged by their title, resized from the corner (min ¼ width), hidden, re-added ("Add panel") and reset. Row height is computed so 12 grid rows fill the window, so the default layout fills the screen at any resolution. Charts redraw to fit their panel.
+- Layout is stored **per person** in `user_preferences.dashboard_layout` (migration `20261029000001`; RLS: own row only, partners cannot read each other's). Stored layouts are validated against the known panel list on load (unknown panels dropped, sizes clamped, malformed → default).
+- An extra *Transactions* panel (desktop only) lists recent transactions with an "Uncategorized" filter; categorising there refreshes the charts.
+- **Phone cost:** the grid library is code-split into a chunk loaded only at ≥ 1200 px (≈26 KB gzipped) and excluded from the service-worker precache (cached at runtime on desktops only). Main bundle grew 434 → 437 KB gzipped. A Playwright test asserts the phone never requests the grid code.
+- Transactions (desktop): sortable table (date, amount) with the transaction detail docked as a side panel instead of a pop-up. Import: two columns (form/preview | new rows/history). Accounts: groups in a responsive grid.
+- **Performance fix found during this work:** categorising imports had become slow (4.3 s DB time for the 1,641-row export) because the rule matcher could not be inlined by Postgres. Migration `20261029000002` rewrites it as inlinable expressions: 0.7 s, identical results.
+
 ## 11. Open questions
 
 1. **Credit card samples** (tabled): one export each from Amex, Discover, IKEA card; Member 1's cards, if any.
@@ -320,3 +330,6 @@ Model:
 | 2026-10-27 | Transfer pair linking moved from Phase 3 to 5a | Spending totals only need the Transfer kind; linking matters for settlements | Accepted |
 | 2026-10-28 | Overview is trend-first, 12 months default | Household preference | Accepted |
 | 2026-10-28 | Loans tracked by statement balances only (no amortisation) | Household preference | Accepted |
+| 2026-10-29 | Desktop-first responsive layout; tiled, draggable, resizable Overview panels | Household uses an ultrawide desktop; phones still supported | Accepted |
+| 2026-10-29 | Dashboard layouts stored per person, not per household | Household preference | Accepted |
+| 2026-10-29 | Default 2 panels per row | Household preference | Accepted |

@@ -29,6 +29,13 @@ ion-list.list-inset {
   max-width: 720px;
 }
 
+/* Wide screens: pages use more of the width (see also the desktop block below). */
+@media (min-width: 1200px) {
+  ion-list.list-inset {
+    max-width: 1100px;
+  }
+}
+
 @media (min-width: 768px) {
   /* !important: Ionic's own .list-md.list-inset margin rule is more specific. */
   ion-list.list-inset {
@@ -269,4 +276,374 @@ ion-item.skipped {
 
 .expand .swatch {
   flex: none;
+}
+
+/* ── Desktop shell ─────────────────────────────────────────────────────── */
+
+@media (min-width: 1200px) {
+  /* The sidebar replaces the bottom tabs. */
+  ion-tab-bar {
+    display: none;
+  }
+}
+
+ion-split-pane {
+  --side-width: 220px;
+  --side-min-width: 220px;
+  --side-max-width: 220px;
+}
+
+.sidebar .brand {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 8px 0 2px;
+  color: var(--ion-color-primary);
+}
+
+.sidebar ion-item {
+  --border-radius: 8px;
+  margin: 2px 8px;
+}
+
+.sidebar ion-item.nav-active {
+  --background: rgba(var(--ion-color-primary-rgb), 0.12);
+  --color: var(--ion-color-primary);
+  font-weight: 600;
+}
+
+.period-end {
+  min-width: 360px;
+  margin-right: 12px;
+}
+
+/* ── Overview: stacked panels (phones, tablets) ─────────────────────────── */
+
+.stack {
+  padding-bottom: 16px;
+}
+
+.stack .chart-box {
+  margin-top: 4px;
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .stack {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .stack .card {
+    margin: 0;
+    max-width: none;
+  }
+
+  .stack .panel-kpis {
+    grid-column: 1 / -1;
+  }
+
+  .stack .panel-kpis .kpis {
+    max-width: none;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.panel-kpis {
+  padding: 0;
+  background: none;
+}
+
+.panel-kpis .kpis {
+  margin-top: 0;
+  padding: 0;
+}
+
+/* ── Overview: tiled workspace (desktop) ────────────────────────────────── */
+
+.workspace {
+  padding: 8px 16px 24px;
+}
+
+.workspace-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.workspace-actions .hint {
+  font-size: 0.8rem;
+  color: var(--ion-color-medium);
+  margin-left: 8px;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--ion-item-background, var(--ion-background-color, #fff));
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px var(--chart-grid);
+}
+
+.panel-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px 6px;
+}
+
+.panel-drag {
+  flex: 1;
+  min-width: 0;
+  cursor: grab;
+  user-select: none;
+}
+
+.react-grid-item.react-draggable-dragging .panel-drag {
+  cursor: grabbing;
+}
+
+.panel-header h2 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.panel-header .caption {
+  margin: 2px 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-close {
+  background: none;
+  border: 0;
+  padding: 4px;
+  border-radius: 4px;
+  color: var(--ion-color-medium);
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 0;
+}
+
+.panel-close:hover {
+  background: rgba(var(--ion-color-medium-rgb), 0.15);
+}
+
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 12px 12px;
+  overflow: auto;
+}
+
+.panel-body > .chart-box {
+  flex: 1;
+  min-height: 0;
+}
+
+.panel-body .kpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+.panel[data-panel='kpis'] .panel-header {
+  display: none;
+}
+
+.panel[data-panel='kpis'] .panel-body {
+  padding: 12px;
+}
+
+.panel[data-panel='kpis'] .kpi {
+  box-shadow: inset 0 0 0 1px var(--chart-grid);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 12px 16px;
+}
+
+.panel[data-panel='kpis'] .kpi .value {
+  font-size: clamp(1.35rem, 0.8rem + 1vw, 2.4rem);
+}
+
+.react-grid-item.react-grid-placeholder {
+  background: var(--ion-color-primary);
+  opacity: 0.15;
+  border-radius: 8px;
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  border-color: var(--ion-color-medium);
+}
+
+/* ── Transactions panel ─────────────────────────────────────────────────── */
+
+.panel-transactions {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.panel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-toolbar ion-segment {
+  max-width: 260px;
+}
+
+.panel-toolbar ion-searchbar {
+  padding: 0;
+}
+
+.panel-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.txn-table td:nth-child(2) {
+  text-align: left;
+}
+
+.txn-table th:nth-child(2),
+.txn-table th:nth-child(3),
+.txn-table td:nth-child(3) {
+  text-align: left;
+}
+
+.txn-table tr.clickable {
+  cursor: pointer;
+}
+
+.txn-table tr.clickable:hover td {
+  background: rgba(var(--ion-color-primary-rgb), 0.06);
+}
+
+/* ── Transactions page (desktop): table + docked detail panel ───────────── */
+
+.txn-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 16px;
+  padding: 0 16px 16px;
+  align-items: start;
+}
+
+.txn-layout ion-list.list-inset {
+  max-width: none;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.txn-filters {
+  display: flex;
+}
+
+.txn-filters ion-item {
+  flex: 1;
+}
+
+.txn-table-full {
+  background: var(--ion-item-background, var(--ion-background-color, #fff));
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.txn-table-full th,
+.txn-table-full td {
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+.txn-table-full td.txn-name {
+  white-space: normal;
+}
+
+.txn-table-full th:nth-child(n + 2):nth-child(-n + 4),
+.txn-table-full td:nth-child(n + 2):nth-child(-n + 4) {
+  text-align: left;
+}
+
+.txn-table tr.selected td {
+  background: rgba(var(--ion-color-primary-rgb), 0.14);
+}
+
+button.sort {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.side-panel {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 100px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--ion-background-color, #fff);
+  box-shadow: 0 0 0 1px var(--chart-grid);
+}
+
+.side-panel-body {
+  overflow: auto;
+}
+
+.side-panel-empty {
+  padding: 24px 16px;
+}
+
+/* ── Accounts and Import (desktop) ─────────────────────────────────────── */
+
+@media (min-width: 1200px) {
+  .accounts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+    gap: 0 16px;
+    padding: 0 16px;
+    align-items: start;
+  }
+
+  .accounts-grid ion-list.list-inset {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    max-width: none;
+  }
+
+  .import-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 16px;
+    padding: 0 16px;
+    align-items: start;
+  }
+
+  .import-layout ion-list.list-inset {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    max-width: none;
+  }
+
+  .import-layout .narrow-block {
+    max-width: none;
+    padding-left: 0;
+    padding-right: 0;
+  }
 }

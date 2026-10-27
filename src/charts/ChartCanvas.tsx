@@ -64,10 +64,11 @@ interface Props {
   /** Builds the chart configuration from the current colours. */
   config: (colors: ChartColors) => ChartConfiguration;
   label: string;
+  /** Fixed height in px; omit to fill the parent (e.g. a resizable panel). */
   height?: number;
 }
 
-export default function ChartCanvas({ config, label, height = 240 }: Props) {
+export default function ChartCanvas({ config, label, height }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const colors = useChartColors();
 
@@ -80,7 +81,7 @@ export default function ChartCanvas({ config, label, height = 240 }: Props) {
   }, [config, colors]);
 
   return (
-    <div className="chart-box" style={{ height }}>
+    <div className="chart-box" style={{ height: height ?? '100%' }}>
       <canvas ref={canvas} role="img" aria-label={label} />
     </div>
   );

@@ -219,6 +219,20 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"user_preferences": {
+                  Row: {
+                    "dashboard_layout": Json | null,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "dashboard_layout"?: Json | null,"updated_at"?: string,"user_id"?: string
+                  }
+                  Update: {
+                    "dashboard_layout"?: Json | null,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 }
           }
           Views: {

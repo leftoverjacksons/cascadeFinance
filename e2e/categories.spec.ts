@@ -1,6 +1,16 @@
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { activePage, addAccount, createHousehold, createUser, importCsv, openTab, pickCategory, signIn } from './helpers';
+import {
+  activePage,
+  addAccount,
+  createHousehold,
+  createUser,
+  importCsv,
+  openTab,
+  pickCategory,
+  signIn,
+  transactionDetail,
+} from './helpers';
 
 const sample = readFileSync(new URL('../tests/fixtures/usaa_bank_sample.csv', import.meta.url));
 
@@ -15,8 +25,8 @@ test('automatic categories, manual override with a rule, bulk edit, rule editor'
   const list = page.getByTestId('transactions');
   // Matches a row by its exact name (a RegExp for partial matches).
   const row = (name: string | RegExp) =>
-    list.locator('ion-item').filter({
-      has: page.locator('h3', { hasText: typeof name === 'string' ? new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) : name }),
+    list.locator('[data-txn]').filter({
+      has: page.locator('.txn-name', { hasText: typeof name === 'string' ? new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) : name }),
     });
   await expect(row('Publix').first()).toContainText('Food & Dining › Groceries');
   await expect(row('Corner Cafe').first()).toContainText('Food & Dining › Coffee Shops');
@@ -25,7 +35,7 @@ test('automatic categories, manual override with a rule, bulk edit, rule editor'
 
   // ── Manual category + rule from a transaction ──
   await row('Corner Cafe').first().click();
-  const modal = page.locator('ion-modal').filter({ hasText: 'Transaction' });
+  const modal = transactionDetail(page);
   await modal.getByTestId('category-field').click();
   await pickCategory(page, 'Restaurants');
   await expect(modal.locator('ion-input').filter({ hasText: 'When the description contains' }).locator('input'))
@@ -38,9 +48,9 @@ test('automatic categories, manual override with a rule, bulk edit, rule editor'
   // ── Uncategorized filter + bulk edit ──
   await activePage(page).getByTestId('category-filter').click();
   await page.locator('ion-modal').getByText('Uncategorized', { exact: true }).click();
-  await expect(list.locator('ion-item')).toHaveCount(1); // only the pending Publix
+  await expect(list.locator('[data-txn]')).toHaveCount(1); // only the pending Publix
   await activePage(page).locator('ion-item', { hasText: 'Clear category filter' }).click();
-  await expect(list.locator('ion-item')).toHaveCount(7);
+  await expect(list.locator('[data-txn]')).toHaveCount(7);
 
   await activePage(page).getByRole('button', { name: 'Select' }).click();
   await row('Publix').click();

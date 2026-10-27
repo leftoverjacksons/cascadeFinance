@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { activePage, createUser, openTab, signIn } from './helpers';
+import { activePage, createUser, navItem, openTab, signIn } from './helpers';
 
 const sample = readFileSync(new URL('../tests/fixtures/usaa_bank_sample.csv', import.meta.url));
 
@@ -26,7 +26,7 @@ test('household setup, partner sharing, and idempotent CSV import', async ({ bro
   await page.locator('ion-input').nth(0).locator('input').fill('Test Household');
   await page.locator('ion-input').nth(1).locator('input').fill('Alex');
   await page.getByRole('button', { name: 'Create household' }).click();
-  await expect(page.locator('ion-tab-bar')).toBeVisible();
+  await expect(navItem(page, 'overview')).toBeVisible();
 
   await openTab(page, 'settings');
   const settings = activePage(page);
@@ -73,11 +73,11 @@ test('household setup, partner sharing, and idempotent CSV import', async ({ bro
   // ── Transactions ──
   await openTab(page, 'transactions');
   const list = page.getByTestId('transactions');
-  await expect(list.locator('ion-item')).toHaveCount(8); // 8 posted, pending replaced
+  await expect(list.locator('[data-txn]')).toHaveCount(8); // 8 posted, pending replaced
   await expect(list.getByText('Pending', { exact: true })).toHaveCount(0);
   await expect(list.getByText('Corner Cafe')).toHaveCount(2); // identical same-day purchases kept
   await activePage(page).locator('ion-searchbar input').fill('publix');
-  await expect(list.locator('ion-item')).toHaveCount(2);
+  await expect(list.locator('[data-txn]')).toHaveCount(2);
 
   // ── Balance on accounts ──
   await openTab(page, 'accounts');
@@ -88,6 +88,6 @@ test('household setup, partner sharing, and idempotent CSV import', async ({ bro
   const partner = await ctx.newPage();
   await signIn(partner, blair);
   await openTab(partner, 'transactions');
-  await expect(partner.getByTestId('transactions').locator('ion-item')).toHaveCount(8);
+  await expect(partner.getByTestId('transactions').locator('[data-txn]')).toHaveCount(8);
   await ctx.close();
 });

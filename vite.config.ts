@@ -31,6 +31,16 @@ export default defineConfig({
       workbox: {
         // Never cache Supabase API traffic; financial data must always be fresh.
         navigateFallbackDenylist: [/^\/rest\//, /^\/auth\//, /^\/storage\//],
+        // The desktop dashboard grid is loaded only on wide screens; don't make
+        // phones pre-download it. Desktops cache it the first time it loads.
+        globIgnores: ['**/Workspace-*'],
+        runtimeCaching: [
+          {
+            urlPattern: /\/assets\/Workspace-[^/]+\.(js|css)$/,
+            handler: 'CacheFirst',
+            options: { cacheName: 'desktop-workspace', expiration: { maxEntries: 8 } },
+          },
+        ],
       },
     }),
   ],
