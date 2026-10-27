@@ -5,6 +5,7 @@ import { formatDay } from '../domain/dates';
 import { formatCents, formatCentsCompact, formatCentsWhole } from '../domain/money';
 import { OTHER, UNCATEGORIZED, type MonthSummary } from '../domain/summary';
 import { averageOf, groupValue, monthLabel, TOP_GROUPS, type DashboardModel } from './model';
+import FlowsPanel from './FlowsPanel';
 import TransactionsPanel from './TransactionsPanel';
 
 export interface PanelProps {
@@ -323,6 +324,13 @@ export const PANELS: PanelDef[] = [
     caption: () => 'Per month. Transfers between your accounts are left out; pending transactions are not included.',
     mobile: true,
     Body: CashFlowBody,
+  },
+  {
+    id: 'flows',
+    title: 'Money flow',
+    caption: () => 'Where money came from and went, through your accounts. Hover for amounts.',
+    mobile: true,
+    Body: FlowsPanel,
   },
   {
     id: 'netWorth',

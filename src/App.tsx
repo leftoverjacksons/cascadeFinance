@@ -30,6 +30,7 @@ import RulesPage from './pages/RulesPage';
 import SettingsPage from './pages/SettingsPage';
 import SetupHouseholdPage from './pages/SetupHouseholdPage';
 import TransactionsPage from './pages/TransactionsPage';
+import TransfersPage from './pages/TransfersPage';
 
 setupIonicReact();
 
@@ -56,6 +57,7 @@ function MainTabs() {
             <IonRouterOutlet>
               <Route exact path="/overview" component={OverviewPage} />
               <Route exact path="/transactions" component={TransactionsPage} />
+              <Route exact path="/transfers" component={TransfersPage} />
               <Route exact path="/import" component={ImportPage} />
               <Route exact path="/accounts" component={AccountsPage} />
               <Route exact path="/settings" component={SettingsPage} />
@@ -66,7 +68,7 @@ function MainTabs() {
               </Route>
             </IonRouterOutlet>
             <IonTabBar slot="bottom">
-              {NAV_ITEMS.map((n) => (
+              {NAV_ITEMS.filter((n) => n.phoneTab).map((n) => (
                 <IonTabButton key={n.tab} tab={n.tab} href={n.href}>
                   <IonIcon icon={n.icon} />
                   <IonLabel>{n.label}</IonLabel>

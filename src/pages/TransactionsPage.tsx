@@ -34,6 +34,7 @@ import { formatCents } from '../domain/money';
 import { useAccounts } from '../household/useAccounts';
 import { useCategories } from '../household/useCategories';
 import { useIsDesktop } from '../layout/useMediaQuery';
+import { transferLabel, useTransferLinks } from '../household/useTransferLinks';
 import type { Database } from '../lib/database.types';
 import { supabase } from '../lib/supabase';
 
@@ -46,6 +47,7 @@ const UNCATEGORIZED = 'none';
 export default function TransactionsPage() {
   const { accounts, refresh: refreshAccounts } = useAccounts();
   const { tree, byId, refresh: refreshCategories } = useCategories();
+  const { byTxn: linkByTxn, refresh: refreshLinks } = useTransferLinks();
   const [accountId, setAccountId] = useState(ALL);
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL);
   const [filterPickerOpen, setFilterPickerOpen] = useState(false);
@@ -109,6 +111,7 @@ export default function TransactionsPage() {
   useIonViewWillEnter(() => {
     void refreshAccounts();
     void refreshCategories();
+    void refreshLinks();
     void reload();
   });
 
@@ -158,7 +161,10 @@ export default function TransactionsPage() {
 
   function closeDetail({ changed, rulesChanged }: { changed: boolean; rulesChanged: boolean }) {
     setSelected(null);
-    if (changed || rulesChanged) void reload();
+    if (changed || rulesChanged) {
+      void reload();
+      void refreshLinks();
+    }
   }
 
   function sortBy(key: 'date' | 'amount') {
@@ -180,6 +186,7 @@ export default function TransactionsPage() {
         <IonToolbar>
           <IonTitle>Transactions</IonTitle>
           <IonButtons slot="end">
+            <IonButton routerLink="/transfers">Transfers</IonButton>
             <IonButton onClick={toggleSelecting}>{selecting ? 'Done' : 'Select'}</IonButton>
           </IonButtons>
         </IonToolbar>
@@ -269,7 +276,12 @@ export default function TransactionsPage() {
                         {t.status === 'pending' ? <IonBadge color="warning">Pending</IonBadge> : formatDay(t.posted_on)}
                       </td>
                       <td className="txn-name">{t.display_description}</td>
-                      <td className={t.category_id ? '' : 'uncategorized'}>{categoryLabel(t.category_id, byId)}</td>
+                      <td className={t.category_id ? '' : 'uncategorized'}>
+                        {categoryLabel(t.category_id, byId)}
+                        {linkByTxn.has(t.id) && (
+                          <span className="transfer-tag">{transferLabel(linkByTxn.get(t.id)!, accountName)}</span>
+                        )}
+                      </td>
                       <td>{accountName(t.account_id)}</td>
                       <td className={t.amount_cents > 0 ? 'credit amount' : 'amount'}>{formatCents(t.amount_cents)}</td>
                     </tr>
@@ -293,7 +305,11 @@ export default function TransactionsPage() {
                         <IonLabel>
                           <h3 className="txn-name">{t.display_description}</h3>
                           <p className={t.category_id ? '' : 'uncategorized'}>
-                            {[showAccount && accountName(t.account_id), categoryLabel(t.category_id, byId)]
+                            {[
+                              showAccount && accountName(t.account_id),
+                              categoryLabel(t.category_id, byId),
+                              linkByTxn.has(t.id) && transferLabel(linkByTxn.get(t.id)!, accountName),
+                            ]
                               .filter(Boolean)
                               .join(' · ')}
                           </p>
@@ -324,6 +340,7 @@ export default function TransactionsPage() {
                 accountName={accountName(selected.account_id)}
                 tree={tree}
                 byId={byId}
+                transferLinks={{ byTxn: linkByTxn, accountName }}
                 onClose={closeDetail}
               />
             ) : (
@@ -350,6 +367,7 @@ export default function TransactionsPage() {
           accountName={selected ? accountName(selected.account_id) : ''}
           tree={tree}
           byId={byId}
+          transferLinks={{ byTxn: linkByTxn, accountName }}
           onClose={closeDetail}
         />
       )}

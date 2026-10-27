@@ -22,9 +22,11 @@ import { formatDay } from '../domain/dates';
 import { formatCents } from '../domain/money';
 import { suggestPattern } from '../domain/rulePattern';
 import { useRequiredHousehold } from '../household/HouseholdProvider';
+import type { LinkInfo } from '../household/useTransferLinks';
 import { supabase } from '../lib/supabase';
 import type { Transaction } from '../pages/TransactionsPage';
 import CategoryPicker from './CategoryPicker';
+import TransferSection from './TransferSection';
 
 interface Props {
   transaction: Transaction | null;
@@ -35,6 +37,8 @@ interface Props {
   presentation?: 'modal' | 'panel';
   /** changed: this row was saved; rulesChanged: other rows may have been re-categorised too. */
   onClose: (result: { changed: boolean; rulesChanged: boolean }) => void;
+  /** Enables the transfer section (link status, confirm, unlink, link by hand). */
+  transferLinks?: { byTxn: Map<string, LinkInfo>; accountName: (id: string) => string };
 }
 
 const AUTOMATIC = 'automatic';
@@ -45,6 +49,7 @@ export default function TransactionModal({
   tree,
   byId,
   presentation = 'modal',
+  transferLinks,
   onClose,
 }: Props) {
   const { household } = useRequiredHousehold();
@@ -195,6 +200,15 @@ export default function TransactionModal({
         )}
       </IonList>
 
+      {transferLinks && (
+        <TransferSection
+          transaction={t}
+          link={transferLinks.byTxn.get(t.id) ?? null}
+          accountName={transferLinks.accountName}
+          onChanged={() => onClose({ changed: true, rulesChanged: true })}
+        />
+      )}
+
       {canMakeRule && categoryChanged && (
         <IonList inset>
           <IonListHeader>Apply to similar transactions</IonListHeader>
@@ -284,7 +298,11 @@ export default function TransactionModal({
   }
 
   return (
-    <IonModal data-testid="transaction-detail" isOpen={t !== null} onDidDismiss={() => onClose({ changed: false, rulesChanged: false })}>
+    <IonModal
+      data-testid="transaction-detail"
+      isOpen={t !== null}
+      onDidDismiss={() => onClose({ changed: false, rulesChanged: false })}
+    >
       {header}
       {body && <IonContent>{body}</IonContent>}
     </IonModal>

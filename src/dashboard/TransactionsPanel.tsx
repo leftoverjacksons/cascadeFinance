@@ -6,6 +6,7 @@ import { formatDay } from '../domain/dates';
 import { formatCents } from '../domain/money';
 import { useAccounts } from '../household/useAccounts';
 import { useCategories } from '../household/useCategories';
+import { useTransferLinks } from '../household/useTransferLinks';
 import { supabase } from '../lib/supabase';
 import type { Transaction } from '../pages/TransactionsPage';
 import type { PanelProps } from './panels';
@@ -16,6 +17,7 @@ const LIMIT = 200;
 export default function TransactionsPanel({ onDataChanged }: PanelProps) {
   const { tree, byId } = useCategories();
   const { accounts } = useAccounts();
+  const { byTxn, refresh: refreshLinks } = useTransferLinks();
   const [onlyUncategorized, setOnlyUncategorized] = useState(false);
   const [search, setSearch] = useState('');
   const [rows, setRows] = useState<Transaction[]>([]);
@@ -90,10 +92,12 @@ export default function TransactionsPanel({ onDataChanged }: PanelProps) {
         accountName={selected ? accountName(selected.account_id) : ''}
         tree={tree}
         byId={byId}
+        transferLinks={{ byTxn, accountName }}
         onClose={({ changed, rulesChanged }) => {
           setSelected(null);
           if (changed || rulesChanged) {
             void load();
+            void refreshLinks();
             onDataChanged();
           }
         }}

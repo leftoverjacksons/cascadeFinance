@@ -76,7 +76,7 @@ export default function Workspace({ model, onDataChanged }: { model: DashboardMo
       saveTimer.current = setTimeout(async () => {
         const { error } = await supabase
           .from('user_preferences')
-          .upsert({ user_id: userId, dashboard_layout: toSaved(next) as unknown as Json });
+          .upsert({ user_id: userId, dashboard_layout: toSaved(next, KNOWN) as unknown as Json });
         if (error) void toast({ message: `Layout not saved: ${error.message}`, duration: 4000, color: 'danger' });
       }, SAVE_DELAY_MS);
     },

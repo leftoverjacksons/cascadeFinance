@@ -21,18 +21,18 @@ test.describe('desktop workspace', () => {
 
     // Default: two half-width panels side by side (wait for the grid's entry animation).
     await expect
-      .poll(async () => Math.abs((await panel('cashflow').boundingBox())!.y - (await panel('netWorth').boundingBox())!.y))
+      .poll(async () => Math.abs((await panel('cashflow').boundingBox())!.y - (await panel('flows').boundingBox())!.y))
       .toBeLessThan(2);
     const a = (await panel('cashflow').boundingBox())!;
-    const b = (await panel('netWorth').boundingBox())!;
+    const b = (await panel('flows').boundingBox())!;
     expect(Math.abs(a.width - b.width)).toBeLessThan(2);
     const grid = (await page.locator('.workspace .react-grid-layout').boundingBox())!;
     expect(a.width / grid.width).toBeGreaterThan(0.45);
     expect(a.width / grid.width).toBeLessThan(0.55);
 
-    // Hide a panel, then drag another into the right-hand column.
-    await page.getByRole('button', { name: 'Hide Net worth' }).click();
-    await expect(panel('netWorth')).toHaveCount(0);
+    // Hide a panel, then drag another into the right-hand column it leaves free.
+    await page.getByRole('button', { name: 'Hide Money flow' }).click();
+    await expect(panel('flows')).toHaveCount(0);
     const handle = panel('cashflow').locator('.panel-drag');
     const box = (await handle.boundingBox())!;
     await page.mouse.move(box.x + 40, box.y + 10);
@@ -48,15 +48,15 @@ test.describe('desktop workspace', () => {
     await page.waitForTimeout(1500);
     await page.reload();
     await expect(panel('cashflow')).toBeVisible();
-    await expect(panel('netWorth')).toHaveCount(0);
+    await expect(panel('flows')).toHaveCount(0);
     await expect
       .poll(async () => (await panel('cashflow').boundingBox())!.x)
       .toBeGreaterThan(grid.x + grid.width / 2 - 10);
 
     // Add it back from the menu.
     await page.getByRole('button', { name: /Add panel \(1\)/ }).click();
-    await page.getByRole('button', { name: 'Net worth' }).click();
-    await expect(panel('netWorth')).toBeVisible();
+    await page.getByRole('button', { name: 'Money flow' }).click();
+    await expect(panel('flows')).toBeVisible();
 
     // Reset restores the default arrangement.
     await page.getByRole('button', { name: 'Reset layout' }).click();

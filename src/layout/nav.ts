@@ -1,10 +1,21 @@
-import { cloudUploadOutline, homeOutline, listOutline, settingsOutline, walletOutline } from 'ionicons/icons';
+import {
+  cloudUploadOutline,
+  homeOutline,
+  listOutline,
+  settingsOutline,
+  swapHorizontalOutline,
+  walletOutline,
+} from 'ionicons/icons';
 
-/** Top-level sections: bottom tabs on phones, sidebar on desktop. */
+/**
+ * Top-level sections: sidebar on desktop; bottom tabs on phones for those with
+ * `phoneTab: true` (five fit; the rest are reached from a related page).
+ */
 export const NAV_ITEMS = [
-  { tab: 'overview', href: '/overview', label: 'Overview', icon: homeOutline },
-  { tab: 'transactions', href: '/transactions', label: 'Transactions', icon: listOutline },
-  { tab: 'import', href: '/import', label: 'Import', icon: cloudUploadOutline },
-  { tab: 'accounts', href: '/accounts', label: 'Accounts', icon: walletOutline },
-  { tab: 'settings', href: '/settings', label: 'Settings', icon: settingsOutline },
+  { tab: 'overview', href: '/overview', label: 'Overview', icon: homeOutline, phoneTab: true },
+  { tab: 'transactions', href: '/transactions', label: 'Transactions', icon: listOutline, phoneTab: true },
+  { tab: 'transfers', href: '/transfers', label: 'Transfers', icon: swapHorizontalOutline, phoneTab: false },
+  { tab: 'import', href: '/import', label: 'Import', icon: cloudUploadOutline, phoneTab: true },
+  { tab: 'accounts', href: '/accounts', label: 'Accounts', icon: walletOutline, phoneTab: true },
+  { tab: 'settings', href: '/settings', label: 'Settings', icon: settingsOutline, phoneTab: true },
 ] as const;

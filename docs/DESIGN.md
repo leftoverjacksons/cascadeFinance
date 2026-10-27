@@ -1,6 +1,6 @@
 # Cascade Finance — Design Document
 
-> Living document. Status: **v0.8 — Phases 1–4 implemented, plus desktop workspace; next: 5a (shared expenses) / 5 (more formats).**
+> Living document. Status: **v0.9 — Phases 1–4, desktop workspace, 5a part 1 (transfer linking, money-flow Sankey); next: 5a part 2 (shared expenses, settlements).**
 > Update this file whenever a decision is made or reversed; record it in the Decision Log (§11).
 
 ---
@@ -231,7 +231,7 @@ Model:
 | 3 — Categorise ✅ | Category tree, rules engine, manual edit, bulk recategorise. (Transfer *pair linking* moved to 5a, where settlements need it.) |
 | 4 — Overview ✅ | Transactions list (search/filter), monthly cash flow, spending by category, balances, net worth. |
 | 5 — More formats | Credit card formats, savings, loans + balance snapshots. |
-| 5a — Shared expenses | `is_shared`, split ratio, joint contributions, settlement balance. |
+| 5a — Shared expenses | Part 1 ✅ transfer linking + money-flow Sankey. Part 2: two-hop transfers via joint, paybacks/settlements, `is_shared`, split ratio, member balance. |
 | 6 — Budgets & trends | After ~2–3 months of categorised data: per-category monthly targets vs actuals; recurring-charge detection. |
 | 7 — Mobile polish | PWA install, offline read cache, phone-first import flow. (No separate native app planned.) |
 
@@ -290,6 +290,17 @@ Model:
 - Transactions (desktop): sortable table (date, amount) with the transaction detail docked as a side panel instead of a pop-up. Import: two columns (form/preview | new rows/history). Accounts: groups in a responsive grid.
 - **Performance fix found during this work:** categorising imports had become slow (4.3 s DB time for the 1,641-row export) because the rule matcher could not be inlined by Postgres. Migration `20261029000002` rewrites it as inlinable expressions: 0.7 s, identical results.
 
+**Phase 5a part 1 (done): transfer linking and money flow:**
+- Migrations `20261030000001` (enum value `category_source = 'transfer'`, separate because a new enum value cannot be used in the transaction that adds it) and `20261030000002`.
+- `transfer_links` pairs an outgoing transaction with an incoming one in another household account: equal and opposite amount, within 4 days, at least one side transfer-like (transfer-kind category, or description containing TRANSFER/XFER), neither side marked "not a transfer" by a manual spending category. Greedy, closest dates first. Status `auto` (unique candidate both ways), `suggested` (ambiguous, shown for review) or `confirmed`.
+- Linked sides take a transfer category (card payment / loan payment / between accounts by the receiving account's type) with `category_source = 'transfer'`, which rules never override; both drop out of income and spending regardless of wording.
+- Matching runs after every import (statement trigger, after categorisation), on demand ("Find matches"), and once over existing data at migration time. Unlinking records a rejection so the pair is never re-proposed; choosing a spending category by hand unlinks and rejects. Manual linking (`link_transfer`) with candidate list (`transfer_candidates`: opposite sign, other account, ±10 days, exact amounts first).
+- Transfers page: To check (suggested), No match found (transfer-categorised but unlinked, grouped by category), Linked. Transactions show "→ Joint" / "← Checking".
+- **Money flow (Sankey)** panel (chartjs-chart-sankey pinned to 0.14.0: later versions had an unusual burst of releases): income categories → accounts → other accounts (linked transfers, netted per account pair; cycles broken at the smallest flow) → spending groups (same colours as the spending chart) / unmatched transfers out. Flows under 0.3 % of the largest node are not drawn but stay in the table view. On phones and desktop.
+- Dashboard layouts record which panels existed when saved; panels added later appear automatically for existing layouts, hidden ones stay hidden.
+- Known limits: loan and card payments stay "No match found" while those accounts are tracked by statement balance only (no transactions to pair with). Two-hop transfers through the joint account are linked as two separate transfers until part 2.
+- Tests: 25 new pgTAP tests (131 total; verified to fail when the date window is widened), 11 new unit tests, new Playwright transfers scenario.
+
 ## 11. Open questions
 
 1. **Credit card samples** (tabled): one export each from Amex, Discover, IKEA card; Member 1's cards, if any.
@@ -333,3 +344,5 @@ Model:
 | 2026-10-29 | Desktop-first responsive layout; tiled, draggable, resizable Overview panels | Household uses an ultrawide desktop; phones still supported | Accepted |
 | 2026-10-29 | Dashboard layouts stored per person, not per household | Household preference | Accepted |
 | 2026-10-29 | Default 2 panels per row | Household preference | Accepted |
+| 2026-10-30 | Linked transfers override rule categories (source `transfer`); manual spending category means "not a transfer" | Wording-independent exclusion from totals; person's choice wins | Accepted |
+| 2026-10-30 | Money-flow Sankey on the Overview | Household request | Accepted |

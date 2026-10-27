@@ -647,3 +647,34 @@ button.sort {
     padding-right: 0;
   }
 }
+
+.transfer-tag {
+  margin-left: 8px;
+  font-size: 0.8rem;
+  color: var(--ion-color-medium);
+  white-space: nowrap;
+}
+
+/* In a desktop panel the diagram fills the tile; elsewhere it uses its fixed height. */
+.panel-body .flows {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.panel-body .flows > .chart-box {
+  flex: 1;
+  min-height: 0;
+}
+
+.flows-toggle {
+  text-align: right;
+  font-size: 0.8rem;
+  color: var(--ion-color-primary);
+  margin-bottom: 4px;
+}
+
+.flows-note {
+  color: var(--ion-color-medium);
+}

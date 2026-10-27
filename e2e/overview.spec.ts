@@ -35,7 +35,7 @@ test('overview: KPIs, spending table, statement balance and net worth', async ({
   await expect(overview.getByTestId('kpis')).toContainText('-$15,569');
   await expect(overview.getByTestId('balances-table')).toContainText('owes $18,000');
   await expect(overview.getByTestId('group-table')).toContainText('Food & Dining');
-  await expect(overview.locator('canvas')).toHaveCount(3);
+  await expect(overview.locator('canvas')).toHaveCount(4);
 
   // Expanding a group shows its categories.
   // Located by CSS: Playwright's role lookup intermittently treats this table's
@@ -45,6 +45,6 @@ test('overview: KPIs, spending table, statement balance and net worth', async ({
 
   // Changing the period keeps everything rendering.
   await overview.locator('ion-segment-button', { hasText: '6 months' }).click();
-  await expect(overview.locator('canvas')).toHaveCount(3);
+  await expect(overview.locator('canvas')).toHaveCount(4);
   expect(errors).toEqual([]);
 });

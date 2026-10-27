@@ -219,6 +219,70 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"transfer_links": {
+                  Row: {
+                    "created_at": string,"household_id": string,"id": string,"in_txn_id": string,"out_txn_id": string,"status": Database["public"]['Enums']["transfer_status"]
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"household_id": string,"id"?: string,"in_txn_id": string,"out_txn_id": string,"status": Database["public"]['Enums']["transfer_status"]
+                  }
+                  Update: {
+                    "created_at"?: string,"household_id"?: string,"id"?: string,"in_txn_id"?: string,"out_txn_id"?: string,"status"?: Database["public"]['Enums']["transfer_status"]
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "transfer_links_household_id_fkey"
+      columns: ["household_id"]
+isOneToOne: false
+      referencedRelation: "households"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "transfer_links_in_txn_id_fkey"
+      columns: ["in_txn_id"]
+isOneToOne: true
+      referencedRelation: "transactions"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "transfer_links_out_txn_id_fkey"
+      columns: ["out_txn_id"]
+isOneToOne: true
+      referencedRelation: "transactions"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"transfer_rejections": {
+                  Row: {
+                    "created_at": string,"household_id": string,"in_txn_id": string,"out_txn_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"household_id": string,"in_txn_id": string,"out_txn_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"household_id"?: string,"in_txn_id"?: string,"out_txn_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "transfer_rejections_household_id_fkey"
+      columns: ["household_id"]
+isOneToOne: false
+      referencedRelation: "households"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "transfer_rejections_in_txn_id_fkey"
+      columns: ["in_txn_id"]
+isOneToOne: false
+      referencedRelation: "transactions"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "transfer_rejections_out_txn_id_fkey"
+      columns: ["out_txn_id"]
+isOneToOne: false
+      referencedRelation: "transactions"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"user_preferences": {
                   Row: {
                     "dashboard_layout": Json | null,"updated_at": string,"user_id": string
@@ -247,11 +311,25 @@ isOneToOne: false
               "account_id": string,"anchor_date": string,"as_of": string,"balance_cents": number
             }[]
                            },
+"confirm_transfer":
+{ Args: { "p_link": string }; Returns: undefined
+                           },
 "create_household":
 { Args: { "p_display_name": string,"p_name": string }; Returns: string
                            },
 "import_batch":
 { Args: { "p_account_id": string,"p_balance_cents"?: number,"p_exported_on": string,"p_file_sha256": string,"p_format": string,"p_original_filename": string,"p_rows": Json,"p_skip"?: (number)[],"p_storage_path": string }; Returns: Json
+                           },
+"link_transfer":
+{ Args: { "p_a": string,"p_b": string }; Returns: string
+                           },
+"match_transfers":
+{ Args: Record<PropertyKey, never>; Returns: number
+                           },
+"money_flows":
+{ Args: { "p_from": string,"p_to": string }; Returns: {
+              "cents": number,"kind": string,"source": string,"target": string
+            }[]
                            },
 "monthly_category_totals":
 { Args: { "p_from": string,"p_to": string }; Returns: {
@@ -270,10 +348,18 @@ isOneToOne: false
                            },
 "set_transaction_category":
 { Args: { "p_category_id": string,"p_ids": (string)[] }; Returns: number
+                           },
+"transfer_candidates":
+{ Args: { "p_txn": string }; Returns: {
+              "account_id": string,"already_linked": boolean,"amount_cents": number,"display_description": string,"exact_amount": boolean,"gap_days": number,"id": string,"posted_on": string
+            }[]
+                           },
+"unlink_transfer":
+{ Args: { "p_link": string }; Returns: undefined
                            }
           }
           Enums: {
-            "account_type": "checking"|"savings"|"credit_card"|"mortgage"|"auto_loan"|"other_loan"|"other","category_kind": "expense"|"income"|"transfer","category_source": "none"|"rule"|"manual","member_role": "owner"|"member","rule_field": "description"|"bank_category","rule_match": "contains"|"starts_with"|"equals"|"regex","txn_status": "posted"|"pending"
+            "account_type": "checking"|"savings"|"credit_card"|"mortgage"|"auto_loan"|"other_loan"|"other","category_kind": "expense"|"income"|"transfer","category_source": "none"|"rule"|"manual"|"transfer","member_role": "owner"|"member","rule_field": "description"|"bank_category","rule_match": "contains"|"starts_with"|"equals"|"regex","transfer_status": "auto"|"suggested"|"confirmed","txn_status": "posted"|"pending"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -393,7 +479,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "account_type": ["checking", "savings", "credit_card", "mortgage", "auto_loan", "other_loan", "other"],"category_kind": ["expense", "income", "transfer"],"category_source": ["none", "rule", "manual"],"member_role": ["owner", "member"],"rule_field": ["description", "bank_category"],"rule_match": ["contains", "starts_with", "equals", "regex"],"txn_status": ["posted", "pending"]
+            "account_type": ["checking", "savings", "credit_card", "mortgage", "auto_loan", "other_loan", "other"],"category_kind": ["expense", "income", "transfer"],"category_source": ["none", "rule", "manual", "transfer"],"member_role": ["owner", "member"],"rule_field": ["description", "bank_category"],"rule_match": ["contains", "starts_with", "equals", "regex"],"transfer_status": ["auto", "suggested", "confirmed"],"txn_status": ["posted", "pending"]
           }
         }
 } as const
