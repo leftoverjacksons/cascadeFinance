@@ -346,3 +346,4 @@ Model:
 | 2026-10-29 | Default 2 panels per row | Household preference | Accepted |
 | 2026-10-30 | Linked transfers override rule categories (source `transfer`); manual spending category means "not a transfer" | Wording-independent exclusion from totals; person's choice wins | Accepted |
 | 2026-10-30 | Money-flow Sankey on the Overview | Household request | Accepted |
+| 2026-10-31 | Seeded rule: description contains "OD FEE" → Financial › Fees & Charges (priority 400) | USAA labels overdraft fees on loan ACH items as "Auto Payment"; they are fees, not loan payments | Accepted |

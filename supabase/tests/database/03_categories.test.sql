@@ -2,7 +2,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(31);
+select plan(33);
 
 insert into auth.users (id, email, aud, role) values
   ('00000000-0000-0000-0000-00000000000a', 'a@test.local', 'authenticated', 'authenticated'),
@@ -153,6 +153,18 @@ select is((select kind::text from public.categories where id = pg_temp.cat('Pets
 select throws_ok(
   $$ delete from public.categories where id = pg_temp.cat('Other', 'Miscellaneous') $$,
   '42501', null, 'categories cannot be deleted (archive instead)');
+
+-- An older export, so the pending rows above are left alone.
+select public.import_batch('10000000-0000-0000-0000-000000000001', repeat('f', 64),
+  current_setting('test.h1') || '/10000000-0000-0000-0000-000000000001/f.csv', 'f.csv', 'usaa_bank', '2026-10-01',
+  $$[
+    {"posted_on":"2026-10-06","amount_cents":-2900,"raw_description":"OD FEE - ITEM PAID - ACH - FORD MOTOR CR   FORDCREDI","bank_category":"Auto Payment","status":"posted"},
+    {"posted_on":"2026-10-06","amount_cents":-57931,"raw_description":"FORD MOTOR CREDIT","bank_category":"Auto Payment","status":"posted"}
+  ]$$::jsonb);
+select is(pg_temp.cat_of('OD FEE - ITEM PAID - ACH - FORD MOTOR CR   FORDCREDI'), 'Financial > Fees & Charges [rule]',
+  'overdraft fees are fees, even when the bank labels them "Auto Payment"');
+select is(pg_temp.cat_of('FORD MOTOR CREDIT'), 'Transfers > Loan Payments [rule]',
+  'the loan payment itself is still a loan payment');
 
 -- ── Isolation ──────────────────────────────────────────────────────────────
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000c","role":"authenticated"}', true);
