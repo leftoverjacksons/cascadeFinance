@@ -305,6 +305,11 @@ Model:
 
 1. **Credit card samples** (tabled): one export each from Amex, Discover, IKEA card; Member 1's cards, if any.
 2. **Maximum USAA export range:** to be determined empirically by trying the longest custom date range the site allows. Overlapping chunks are safe to import (dedup is order-independent).
+- **Loan payments: transfer or spending? (TABLED 2026-10-31, revisit.)** A loan payment is principal (a transfer: reduces the liability, net worth unchanged) plus interest (a real cost); a mortgage payment may also include escrow (taxes, insurance: real costs). Currently loan payments are a *transfer* (bank category "Auto Payment" → Transfers › Loan Payments), so spending is understated and "avg saved" overstated by the payment (~$579/month for the auto loan). Options:
+  - **A. Transfer (current).** Optionally "point" unmatched loan payments at the loan account so the Sankey shows Checking → Car loan and they leave "No match found".
+  - **B. Spending (recommended).** Move Loan Payments into a spending group (e.g. new "Debt Payments": auto loan, student loan, mortgage); payments into loan accounts count as spending even if loan transactions are imported later. Matches cash-flow budgeting (YNAB-style).
+  - **C. Split** principal (transfer) / interest (spending) using loan terms (rate, schedule); most precise, needs data the household chose not to maintain.
+  In all cases net worth stays correct via statement balances on the loan accounts (household should record the auto loan and mortgage balances).
 
 ## 12. Decision log
 
