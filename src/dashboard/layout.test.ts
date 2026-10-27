@@ -60,7 +60,7 @@ describe('sanitizeLayout', () => {
 
   it('treats layouts saved before `seen` existed as knowing only the first seven panels', () => {
     const old = { version: 1, items: [{ i: 'kpis', x: 0, y: 0, w: 12, h: 2 }] };
-    expect(sanitizeLayout(old, known).map((it) => it.i)).toEqual(['kpis', 'flows']);
+    expect(sanitizeLayout(old, known).map((it) => it.i)).toEqual(['kpis', 'flows', 'shared']);
   });
 });
 

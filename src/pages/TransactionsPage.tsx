@@ -340,7 +340,8 @@ export default function TransactionsPage() {
                 accountName={accountName(selected.account_id)}
                 tree={tree}
                 byId={byId}
-                transferLinks={{ byTxn: linkByTxn, accountName }}
+                account={selected ? accounts.find((a) => a.id === selected.account_id) : undefined}
+        transferLinks={{ byTxn: linkByTxn, accountName }}
                 onClose={closeDetail}
               />
             ) : (
@@ -367,7 +368,8 @@ export default function TransactionsPage() {
           accountName={selected ? accountName(selected.account_id) : ''}
           tree={tree}
           byId={byId}
-          transferLinks={{ byTxn: linkByTxn, accountName }}
+          account={selected ? accounts.find((a) => a.id === selected.account_id) : undefined}
+        transferLinks={{ byTxn: linkByTxn, accountName }}
           onClose={closeDetail}
         />
       )}

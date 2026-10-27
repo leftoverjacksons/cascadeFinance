@@ -4,7 +4,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(25);
+select plan(26);
 
 insert into auth.users (id, email, aud, role) values
   ('00000000-0000-0000-0000-00000000000a', 'a@test.local', 'authenticated', 'authenticated'),
@@ -108,10 +108,17 @@ select is(
 select set_config('test.l2', (select id::text from public.transfer_links where out_txn_id = pg_temp.txn('USAA FUNDS TRANSFER DB 2')), true);
 select set_config('test.l2_in', (select in_txn_id::text from public.transfer_links where out_txn_id = pg_temp.txn('USAA FUNDS TRANSFER DB 2')), true);
 select public.unlink_transfer(current_setting('test.l2')::uuid);
-select is(pg_temp.link_of('USAA FUNDS TRANSFER DB 2'), 'none', 'unlinking removes the link');
-select is(pg_temp.cat_of('USAA FUNDS TRANSFER DB 2'), 'Transfers > Between Accounts [rule]',
-  'unlinked sides go back to their rule-based category');
-select is(public.match_transfers(), 0, 'a rejected pair is never proposed again');
+select is(
+  (select count(*)::int from public.transfer_links
+   where out_txn_id = pg_temp.txn('USAA FUNDS TRANSFER DB 2') and in_txn_id = current_setting('test.l2_in')::uuid),
+  0, 'unlinking removes the link');
+select is(
+  (select count(*)::int from public.transfer_rejections
+   where out_txn_id = pg_temp.txn('USAA FUNDS TRANSFER DB 2') and in_txn_id = current_setting('test.l2_in')::uuid),
+  1, 'and records the rejection');
+select is(pg_temp.link_of('USAA FUNDS TRANSFER DB 2'), 'suggested',
+  'the two equal transfers are re-paired the other way round');
+select is(public.match_transfers(), 0, 'matching again changes nothing: the rejected pair is never proposed again');
 
 select lives_ok(
   $$ select public.link_transfer(current_setting('test.l2_in')::uuid, pg_temp.txn('USAA FUNDS TRANSFER DB 2')) $$,

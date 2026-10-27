@@ -11,12 +11,15 @@ import {
   IonListHeader,
   IonModal,
   IonNote,
+  IonSelect,
+  IonSelectOption,
   IonTextarea,
   IonTitle,
   IonToolbar,
   useIonToast,
 } from '@ionic/react';
 import { useEffect, useState } from 'react';
+import type { Account } from '../domain/accounts';
 import { categoryLabel, type Category, type CategoryGroup } from '../domain/categories';
 import { formatDay } from '../domain/dates';
 import { formatCents } from '../domain/money';
@@ -39,6 +42,8 @@ interface Props {
   onClose: (result: { changed: boolean; rulesChanged: boolean }) => void;
   /** Enables the transfer section (link status, confirm, unlink, link by hand). */
   transferLinks?: { byTxn: Map<string, LinkInfo>; accountName: (id: string) => string };
+  /** The transaction's account; enables the "shared with partner" setting for personal accounts. */
+  account?: Account;
 }
 
 const AUTOMATIC = 'automatic';
@@ -50,11 +55,14 @@ export default function TransactionModal({
   byId,
   presentation = 'modal',
   transferLinks,
+  account,
   onClose,
 }: Props) {
   const { household } = useRequiredHousehold();
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
+  // 'default' follows the category; 'yes' / 'no' override it for this transaction.
+  const [shared, setShared] = useState<'default' | 'yes' | 'no'>('default');
   // A category id, or AUTOMATIC to hand the row back to the rules.
   const [category, setCategory] = useState<string>(AUTOMATIC);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -65,6 +73,12 @@ export default function TransactionModal({
   const [toast] = useIonToast();
 
   const pending = t?.status === 'pending';
+  // Shared expenses apply to spending from a personal account (joint spending is shared already).
+  const savedCategory = t?.category_id ? byId.get(t.category_id) : undefined;
+  const linked = t ? !!transferLinks?.byTxn.get(t.id) : false;
+  const canShare =
+    !!t && !pending && !!account?.owner_user_id && !linked && (!savedCategory || savedCategory.kind === 'expense');
+  const categoryShared = savedCategory?.is_shared ?? false;
   const initialCategory = t ? (t.category_source === 'manual' ? t.category_id! : AUTOMATIC) : AUTOMATIC;
   const categoryChanged = category !== initialCategory;
   const canMakeRule = category !== AUTOMATIC && !pending;
@@ -73,6 +87,7 @@ export default function TransactionModal({
     if (!t) return;
     setName(t.display_description);
     setNotes(t.notes ?? '');
+    setShared(t.shared_override === null ? 'default' : t.shared_override ? 'yes' : 'no');
     setCategory(t.category_source === 'manual' ? t.category_id! : AUTOMATIC);
     setMakeRule(false);
     setPattern(suggestPattern(t.raw_description));
@@ -97,7 +112,11 @@ export default function TransactionModal({
     if (!t) return;
     setBusy(true);
     try {
-      const fields = { display_description: name.trim() || t.raw_description, notes: notes.trim() || null };
+      const fields = {
+        display_description: name.trim() || t.raw_description,
+        notes: notes.trim() || null,
+        ...(canShare ? { shared_override: shared === 'default' ? null : shared === 'yes' } : {}),
+      };
       const upd = await supabase.from('transactions').update(fields).eq('id', t.id);
       if (upd.error) throw upd.error;
 
@@ -241,6 +260,24 @@ export default function TransactionModal({
               </IonItem>
             </>
           )}
+        </IonList>
+      )}
+
+      {canShare && (
+        <IonList inset data-testid="shared-setting">
+          <IonItem>
+            <IonSelect
+              label="Shared with partner"
+              value={shared}
+              onIonChange={(e) => setShared(e.detail.value as 'default' | 'yes' | 'no')}
+            >
+              <IonSelectOption value="default">
+                Category default ({categoryShared ? 'shared' : 'not shared'})
+              </IonSelectOption>
+              <IonSelectOption value="yes">Shared</IonSelectOption>
+              <IonSelectOption value="no">Not shared</IonSelectOption>
+            </IonSelect>
+          </IonItem>
         </IonList>
       )}
 

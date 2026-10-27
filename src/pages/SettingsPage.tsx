@@ -97,6 +97,9 @@ export default function SettingsPage() {
           <IonItem routerLink="/settings/rules" detail>
             <IonLabel>Rules</IonLabel>
           </IonItem>
+          <IonItem routerLink="/shared" detail>
+            <IonLabel>Shared expenses and paybacks</IonLabel>
+          </IonItem>
         </IonList>
 
         {me.role === 'owner' && members.length < 2 && (

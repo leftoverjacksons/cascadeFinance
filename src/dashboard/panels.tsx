@@ -6,6 +6,7 @@ import { formatCents, formatCentsCompact, formatCentsWhole } from '../domain/mon
 import { OTHER, UNCATEGORIZED, type MonthSummary } from '../domain/summary';
 import { averageOf, groupValue, monthLabel, TOP_GROUPS, type DashboardModel } from './model';
 import FlowsPanel from './FlowsPanel';
+import SharedPanel from './SharedPanel';
 import TransactionsPanel from './TransactionsPanel';
 
 export interface PanelProps {
@@ -354,6 +355,13 @@ export const PANELS: PanelDef[] = [
     Body: SpendingTableBody,
   },
   { id: 'balances', title: 'Account balances', mobile: true, Body: BalancesBody },
+  {
+    id: 'shared',
+    title: 'Shared between you',
+    caption: () => 'Shared spending each of you paid, and who owes whom.',
+    mobile: true,
+    Body: SharedPanel,
+  },
   {
     id: 'transactions',
     title: 'Transactions',

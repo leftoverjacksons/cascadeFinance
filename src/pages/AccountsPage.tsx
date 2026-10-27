@@ -54,8 +54,9 @@ export default function AccountsPage() {
         <IonToolbar>
           <IonTitle>Accounts</IonTitle>
           <IonButtons slot="end">
-            <IonButton onClick={() => openEditor(null)} aria-label="Add account">
-              <IonIcon slot="icon-only" icon={add} />
+            <IonButton onClick={() => openEditor(null)}>
+              <IonIcon slot="start" icon={add} aria-hidden="true" />
+              Add account
             </IonButton>
           </IonButtons>
         </IonToolbar>

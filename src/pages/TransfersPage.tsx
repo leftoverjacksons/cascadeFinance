@@ -253,6 +253,7 @@ export default function TransfersPage() {
         accountName={selected ? accountName(selected.account_id) : ''}
         tree={tree}
         byId={byId}
+        account={selected ? accounts.find((a) => a.id === selected.account_id) : undefined}
         transferLinks={{ byTxn, accountName }}
         onClose={({ changed }) => {
           setSelected(null);

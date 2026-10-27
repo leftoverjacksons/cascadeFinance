@@ -25,9 +25,11 @@ import OverviewPage from './pages/OverviewPage';
 import { DESKTOP_QUERY } from './layout/useMediaQuery';
 import { NAV_ITEMS } from './layout/nav';
 import Sidebar from './layout/Sidebar';
+import { useOverlayAriaFix } from './layout/useOverlayAriaFix';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import RulesPage from './pages/RulesPage';
 import SettingsPage from './pages/SettingsPage';
+import SharedPage from './pages/SharedPage';
 import SetupHouseholdPage from './pages/SetupHouseholdPage';
 import TransactionsPage from './pages/TransactionsPage';
 import TransfersPage from './pages/TransfersPage';
@@ -47,6 +49,7 @@ function Loading() {
 }
 
 function MainTabs() {
+  useOverlayAriaFix();
   return (
     <IonReactHashRouter>
       <IonSplitPane contentId="main" when={DESKTOP_QUERY}>
@@ -58,6 +61,7 @@ function MainTabs() {
               <Route exact path="/overview" component={OverviewPage} />
               <Route exact path="/transactions" component={TransactionsPage} />
               <Route exact path="/transfers" component={TransfersPage} />
+              <Route exact path="/shared" component={SharedPage} />
               <Route exact path="/import" component={ImportPage} />
               <Route exact path="/accounts" component={AccountsPage} />
               <Route exact path="/settings" component={SettingsPage} />

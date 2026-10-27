@@ -1,6 +1,6 @@
 # Cascade Finance — Design Document
 
-> Living document. Status: **v0.9 — Phases 1–4, desktop workspace, 5a part 1 (transfer linking, money-flow Sankey); next: 5a part 2 (shared expenses, settlements).**
+> Living document. Status: **v1.0 — Phases 1–4, desktop workspace, 5a (transfer linking, money flow, shared expenses and paybacks); next: 5 (card formats) / 6 (budgets).**
 > Update this file whenever a decision is made or reversed; record it in the Decision Log (§11).
 
 ---
@@ -231,7 +231,7 @@ Model:
 | 3 — Categorise ✅ | Category tree, rules engine, manual edit, bulk recategorise. (Transfer *pair linking* moved to 5a, where settlements need it.) |
 | 4 — Overview ✅ | Transactions list (search/filter), monthly cash flow, spending by category, balances, net worth. |
 | 5 — More formats | Credit card formats, savings, loans + balance snapshots. |
-| 5a — Shared expenses | Part 1 ✅ transfer linking + money-flow Sankey. Part 2: two-hop transfers via joint, paybacks/settlements, `is_shared`, split ratio, member balance. |
+| 5a — Shared expenses ✅ | Part 1: transfer linking + money-flow Sankey. Part 2: shared expenses, paybacks (direct and via joint), recorded payments, member balance. |
 | 6 — Budgets & trends | After ~2–3 months of categorised data: per-category monthly targets vs actuals; recurring-charge detection. |
 | 7 — Mobile polish | PWA install, offline read cache, phone-first import flow. (No separate native app planned.) |
 
@@ -301,6 +301,17 @@ Model:
 - Known limits: loan and card payments stay "No match found" while those accounts are tracked by statement balance only (no transactions to pair with). Two-hop transfers through the joint account are linked as two separate transfers until part 2.
 - Tests: 25 new pgTAP tests (131 total; verified to fail when the date window is widened), 11 new unit tests, new Playwright transfers scenario.
 
+**Phase 5a part 2 (done): shared expenses and paybacks:**
+- Migration `20261101000001_shared.sql`. Implements §9a with these concrete choices:
+  - *What is shared:* `categories.is_shared` ("shared by default"; seeded for Groceries, Housing, Utilities, Pets) with a per-transaction override `transactions.shared_override` (null = category default). Only spending from a personal account (`accounts.owner_user_id` set) enters the ledger; joint-account spending is shared by definition and creates no debt. Linked transfers are never expenses.
+  - *Split:* per-member `split_weight` (unchanged; 50/50 default).
+  - *Paybacks:* `member_transfers()` derives money moving between two members' personal accounts: direct links, and two-hop routes personal → joint → other personal (same amount, second hop within 7 days of the first arriving; most-constrained/closest first, each hop used once). Each counts as a payback unless switched off (`settlement_overrides`, keyed by the sender's transaction so it survives re-matching). Payments outside the accounts go in `manual_settlements`. Money put into the joint account and not passed on is not a payback (pass-through model from §9a).
+  - *Ledger:* `shared_ledger()` returns entries "debtor owes creditor N cents" (expense shares, paybacks, recorded payments) from `households.shared_since` (null = all history). The client nets them per pair.
+- **Matcher change: order-independent.** Automatic and suggested links are recomputed from scratch on every run (confirmed links and rejections kept), most constrained first (a transaction with one possible partner is paired before ones with alternatives), then closest dates. Manual link / unlink / "not a transfer" re-run it immediately. Previously the result depended on import order (a 4-day direct pairing could pre-empt two 1-day hops via the joint account imported later). "Zelle" now counts as transfer wording.
+- UI: Shared page (balance with "Settle up", start date, by-month table, money between you with a Payback toggle, recorded payments, shared expenses with "Not shared"); "Shared between you" dashboard panel; "shared by default" on categories; "Shared with partner" on a transaction (personal-account spending only).
+- **Accessibility bug fixed:** closing a dialog that contained a dropdown (e.g. account owner, import account) left `aria-hidden` on the router outlet, hiding the whole app from screen readers. A global handler clears it once no overlay is open; regression-tested. (This was the cause of an earlier "flaky" test previously attributed to Playwright.)
+- Tests: 19 new pgTAP tests (153 total) incl. import-order independence; 5 new unit tests; Playwright shared scenario.
+
 ## 11. Open questions
 
 1. **Credit card samples** (tabled): one export each from Amex, Discover, IKEA card; Member 1's cards, if any.
@@ -352,3 +363,5 @@ Model:
 | 2026-10-30 | Linked transfers override rule categories (source `transfer`); manual spending category means "not a transfer" | Wording-independent exclusion from totals; person's choice wins | Accepted |
 | 2026-10-30 | Money-flow Sankey on the Overview | Household request | Accepted |
 | 2026-10-31 | Seeded rule: description contains "OD FEE" → Financial › Fees & Charges (priority 400) | USAA labels overdraft fees on loan ACH items as "Auto Payment"; they are fees, not loan payments | Accepted |
+| 2026-11-01 | Shared-by-default per category + per-transaction override | Few decisions up front; exceptions where they occur | Accepted |
+| 2026-11-01 | Transfer matching recomputed on every run (order-independent) | Same result regardless of import order | Accepted |

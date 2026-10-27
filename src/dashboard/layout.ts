@@ -41,6 +41,7 @@ export const DEFAULT_LAYOUT: LayoutItem[] = [
   { i: 'netWorth', x: 0, y: 12, w: 6, h: 5 },
   { i: 'balances', x: 6, y: 12, w: 6, h: 5 },
   { i: 'transactions', x: 0, y: 17, w: 6, h: 6 },
+  { i: 'shared', x: 6, y: 17, w: 6, h: 6 },
 ];
 
 const isInt = (v: unknown): v is number => Number.isInteger(v);

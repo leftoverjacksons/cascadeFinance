@@ -13,7 +13,7 @@ import {
 } from './summary';
 
 function cat(id: string, kind: Category['kind'], parent_id: string | null = null): Category {
-  return { id, name: id, kind, parent_id, household_id: 'h', is_archived: false, sort_order: 0, created_at: '' };
+  return { id, name: id, kind, parent_id, household_id: 'h', is_archived: false, is_shared: false, sort_order: 0, created_at: '' };
 }
 
 const cats = [

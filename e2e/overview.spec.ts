@@ -38,9 +38,7 @@ test('overview: KPIs, spending table, statement balance and net worth', async ({
   await expect(overview.locator('canvas')).toHaveCount(4);
 
   // Expanding a group shows its categories.
-  // Located by CSS: Playwright's role lookup intermittently treats this table's
-  // buttons as hidden although they are visible, stable and labelled.
-  await overview.locator('[data-testid=group-table] button', { hasText: 'Food & Dining' }).click();
+  await overview.getByRole('button', { name: 'Food & Dining: show categories' }).click();
   await expect(overview.getByTestId('group-table')).toContainText('Groceries');
 
   // Changing the period keeps everything rendering.

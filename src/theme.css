@@ -678,3 +678,16 @@ button.sort {
 .flows-note {
   color: var(--ion-color-medium);
 }
+
+.balance-card .balance-line,
+.shared-panel .balance-line {
+  font-size: 1.05rem;
+  margin: 0 0 4px;
+}
+
+.balance-card .balance-amount {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 4px;
+  font-variant-numeric: tabular-nums;
+}

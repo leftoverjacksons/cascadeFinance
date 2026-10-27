@@ -9,6 +9,7 @@ function cat(id: string, name: string, parent_id: string | null = null, extra: P
     household_id: 'h',
     kind: 'expense',
     is_archived: false,
+    is_shared: false,
     sort_order: 0,
     created_at: '',
     ...extra,

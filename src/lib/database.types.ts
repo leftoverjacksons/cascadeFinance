@@ -77,14 +77,14 @@ isOneToOne: false
                   ]
                 },"categories": {
                   Row: {
-                    "created_at": string,"household_id": string,"id": string,"is_archived": boolean,"kind": Database["public"]['Enums']["category_kind"],"name": string,"parent_id": string | null,"sort_order": number
+                    "created_at": string,"household_id": string,"id": string,"is_archived": boolean,"is_shared": boolean,"kind": Database["public"]['Enums']["category_kind"],"name": string,"parent_id": string | null,"sort_order": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"household_id": string,"id"?: string,"is_archived"?: boolean,"kind"?: Database["public"]['Enums']["category_kind"],"name": string,"parent_id"?: string | null,"sort_order"?: number
+                    "created_at"?: string,"household_id": string,"id"?: string,"is_archived"?: boolean,"is_shared"?: boolean,"kind"?: Database["public"]['Enums']["category_kind"],"name": string,"parent_id"?: string | null,"sort_order"?: number
                   }
                   Update: {
-                    "created_at"?: string,"household_id"?: string,"id"?: string,"is_archived"?: boolean,"kind"?: Database["public"]['Enums']["category_kind"],"name"?: string,"parent_id"?: string | null,"sort_order"?: number
+                    "created_at"?: string,"household_id"?: string,"id"?: string,"is_archived"?: boolean,"is_shared"?: boolean,"kind"?: Database["public"]['Enums']["category_kind"],"name"?: string,"parent_id"?: string | null,"sort_order"?: number
                   }
                   Relationships: [
                     {
@@ -155,14 +155,14 @@ isOneToOne: false
                   ]
                 },"households": {
                   Row: {
-                    "created_at": string,"id": string,"name": string
+                    "created_at": string,"id": string,"name": string,"shared_since": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"id"?: string,"name": string
+                    "created_at"?: string,"id"?: string,"name": string,"shared_since"?: string | null
                   }
                   Update: {
-                    "created_at"?: string,"id"?: string,"name"?: string
+                    "created_at"?: string,"id"?: string,"name"?: string,"shared_since"?: string | null
                   }
                   Relationships: [
                     
@@ -187,16 +187,74 @@ isOneToOne: false
       referencedColumns: ["household_id","id"]
     }
                   ]
-                },"transactions": {
+                },"manual_settlements": {
                   Row: {
-                    "account_id": string,"amount_cents": number,"bank_category": string | null,"category_id": string | null,"category_source": Database["public"]['Enums']["category_source"],"created_at": string,"display_description": string,"fingerprint": string | null,"household_id": string,"id": string,"import_id": string | null,"notes": string | null,"occurrence": number | null,"posted_on": string,"raw_description": string,"status": Database["public"]['Enums']["txn_status"],"updated_at": string
+                    "amount_cents": number,"created_at": string,"created_by": string | null,"from_user_id": string,"household_id": string,"id": string,"note": string | null,"settled_on": string,"to_user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "account_id": string,"amount_cents": number,"bank_category"?: string | null,"category_id"?: string | null,"category_source"?: Database["public"]['Enums']["category_source"],"created_at"?: string,"display_description": string,"fingerprint"?: string | null,"household_id": string,"id"?: string,"import_id"?: string | null,"notes"?: string | null,"occurrence"?: number | null,"posted_on": string,"raw_description": string,"status": Database["public"]['Enums']["txn_status"],"updated_at"?: string
+                    "amount_cents": number,"created_at"?: string,"created_by"?: string | null,"from_user_id": string,"household_id": string,"id"?: string,"note"?: string | null,"settled_on": string,"to_user_id": string
                   }
                   Update: {
-                    "account_id"?: string,"amount_cents"?: number,"bank_category"?: string | null,"category_id"?: string | null,"category_source"?: Database["public"]['Enums']["category_source"],"created_at"?: string,"display_description"?: string,"fingerprint"?: string | null,"household_id"?: string,"id"?: string,"import_id"?: string | null,"notes"?: string | null,"occurrence"?: number | null,"posted_on"?: string,"raw_description"?: string,"status"?: Database["public"]['Enums']["txn_status"],"updated_at"?: string
+                    "amount_cents"?: number,"created_at"?: string,"created_by"?: string | null,"from_user_id"?: string,"household_id"?: string,"id"?: string,"note"?: string | null,"settled_on"?: string,"to_user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "manual_settlements_household_id_fkey"
+      columns: ["household_id"]
+isOneToOne: false
+      referencedRelation: "households"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "manual_settlements_household_id_from_user_id_fkey"
+      columns: ["household_id","from_user_id"]
+isOneToOne: false
+      referencedRelation: "household_members"
+      referencedColumns: ["household_id","user_id"]
+    },{
+      foreignKeyName: "manual_settlements_household_id_to_user_id_fkey"
+      columns: ["household_id","to_user_id"]
+isOneToOne: false
+      referencedRelation: "household_members"
+      referencedColumns: ["household_id","user_id"]
+    }
+                  ]
+                },"settlement_overrides": {
+                  Row: {
+                    "created_at": string,"household_id": string,"is_settlement": boolean,"out_txn_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"household_id": string,"is_settlement": boolean,"out_txn_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"household_id"?: string,"is_settlement"?: boolean,"out_txn_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "settlement_overrides_household_id_fkey"
+      columns: ["household_id"]
+isOneToOne: false
+      referencedRelation: "households"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "settlement_overrides_out_txn_id_fkey"
+      columns: ["out_txn_id"]
+isOneToOne: true
+      referencedRelation: "transactions"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"transactions": {
+                  Row: {
+                    "account_id": string,"amount_cents": number,"bank_category": string | null,"category_id": string | null,"category_source": Database["public"]['Enums']["category_source"],"created_at": string,"display_description": string,"fingerprint": string | null,"household_id": string,"id": string,"import_id": string | null,"notes": string | null,"occurrence": number | null,"posted_on": string,"raw_description": string,"shared_override": boolean | null,"status": Database["public"]['Enums']["txn_status"],"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "account_id": string,"amount_cents": number,"bank_category"?: string | null,"category_id"?: string | null,"category_source"?: Database["public"]['Enums']["category_source"],"created_at"?: string,"display_description": string,"fingerprint"?: string | null,"household_id": string,"id"?: string,"import_id"?: string | null,"notes"?: string | null,"occurrence"?: number | null,"posted_on": string,"raw_description": string,"shared_override"?: boolean | null,"status": Database["public"]['Enums']["txn_status"],"updated_at"?: string
+                  }
+                  Update: {
+                    "account_id"?: string,"amount_cents"?: number,"bank_category"?: string | null,"category_id"?: string | null,"category_source"?: Database["public"]['Enums']["category_source"],"created_at"?: string,"display_description"?: string,"fingerprint"?: string | null,"household_id"?: string,"id"?: string,"import_id"?: string | null,"notes"?: string | null,"occurrence"?: number | null,"posted_on"?: string,"raw_description"?: string,"shared_override"?: boolean | null,"status"?: Database["public"]['Enums']["txn_status"],"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -326,6 +384,11 @@ isOneToOne: false
 "match_transfers":
 { Args: Record<PropertyKey, never>; Returns: number
                            },
+"member_transfers":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "amount_cents": number,"from_user": string,"is_settlement": boolean,"link_id": string,"out_txn_id": string,"received_on": string,"second_link": string,"sent_on": string,"to_user": string,"via_account": string
+            }[]
+                           },
 "money_flows":
 { Args: { "p_from": string,"p_to": string }; Returns: {
               "cents": number,"kind": string,"source": string,"target": string
@@ -348,6 +411,11 @@ isOneToOne: false
                            },
 "set_transaction_category":
 { Args: { "p_category_id": string,"p_ids": (string)[] }; Returns: number
+                           },
+"shared_ledger":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "cents": number,"creditor": string,"debtor": string,"description": string,"entry_date": string,"entry_kind": string,"ref_id": string,"total_cents": number
+            }[]
                            },
 "transfer_candidates":
 { Args: { "p_txn": string }; Returns: {

@@ -45,15 +45,20 @@ export async function createHousehold(page: Page, householdName: string, myName:
   await expect(navItem(page, 'overview')).toBeVisible();
 }
 
-export async function addAccount(page: Page, name: string, institution = 'USAA', type?: string) {
+export async function addAccount(page: Page, name: string, institution = 'USAA', type?: string, owner?: string) {
   await openTab(page, 'accounts');
-  await page.getByRole('button', { name: 'Add account' }).first().click();
+  await activePage(page).getByRole('button', { name: 'Add account' }).first().click();
   const modal = page.locator('ion-modal').filter({ hasText: 'New account' });
   await modal.locator('ion-input').nth(0).locator('input').fill(name);
   await modal.locator('ion-input').nth(1).locator('input').fill(institution);
   if (type) {
     await modal.locator('ion-select').first().click();
     await page.getByRole('radio', { name: type }).click();
+    await page.getByRole('button', { name: 'OK' }).click();
+  }
+  if (owner) {
+    await modal.locator('ion-select').nth(1).click();
+    await page.getByRole('radio', { name: owner }).click();
     await page.getByRole('button', { name: 'OK' }).click();
   }
   await modal.getByRole('button', { name: 'Save' }).click();

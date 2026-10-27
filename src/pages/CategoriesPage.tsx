@@ -122,6 +122,14 @@ export default function CategoriesPage() {
           ? [
               { text: 'Add category', handler: () => addChild(c, childCount) },
               {
+                text: 'Share all its categories by default',
+                handler: () => void run(supabase.from('categories').update({ is_shared: true }).eq('parent_id', c.id)),
+              },
+              {
+                text: 'Share none of its categories by default',
+                handler: () => void run(supabase.from('categories').update({ is_shared: false }).eq('parent_id', c.id)),
+              },
+              {
                 text: 'Change kind',
                 handler: () =>
                   void alert({
@@ -143,7 +151,12 @@ export default function CategoriesPage() {
                   }),
               },
             ]
-          : []),
+          : [
+              {
+                text: c.is_shared ? 'Stop sharing by default' : 'Shared with partner by default',
+                handler: () => void run(supabase.from('categories').update({ is_shared: !c.is_shared }).eq('id', c.id)),
+              },
+            ]),
         {
           text: c.is_archived ? 'Restore' : 'Archive',
           role: c.is_archived ? undefined : 'destructive',
@@ -179,7 +192,8 @@ export default function CategoriesPage() {
             <IonText color="medium">
               <p className="hint">
                 Archived categories are hidden from pickers but keep their history. Groups marked
-                Transfer are left out of spending and income totals.
+                Transfer are left out of spending and income totals. Categories marked "shared" are
+                split with your partner when paid from one person's own account (see Shared).
               </p>
             </IonText>
           </IonItem>
@@ -208,6 +222,11 @@ export default function CategoriesPage() {
                   {c.name}
                   {c.is_archived && ' (archived)'}
                 </IonLabel>
+                {c.is_shared && (
+                  <IonNote slot="end" data-testid="shared-badge">
+                    shared
+                  </IonNote>
+                )}
               </IonItem>
             ))}
           </IonList>
