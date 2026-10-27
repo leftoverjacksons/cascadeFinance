@@ -75,6 +75,64 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"categories": {
+                  Row: {
+                    "created_at": string,"household_id": string,"id": string,"is_archived": boolean,"kind": Database["public"]['Enums']["category_kind"],"name": string,"parent_id": string | null,"sort_order": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"household_id": string,"id"?: string,"is_archived"?: boolean,"kind"?: Database["public"]['Enums']["category_kind"],"name": string,"parent_id"?: string | null,"sort_order"?: number
+                  }
+                  Update: {
+                    "created_at"?: string,"household_id"?: string,"id"?: string,"is_archived"?: boolean,"kind"?: Database["public"]['Enums']["category_kind"],"name"?: string,"parent_id"?: string | null,"sort_order"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "categories_household_id_fkey"
+      columns: ["household_id"]
+isOneToOne: false
+      referencedRelation: "households"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "categories_household_id_parent_id_fkey"
+      columns: ["household_id","parent_id"]
+isOneToOne: false
+      referencedRelation: "categories"
+      referencedColumns: ["household_id","id"]
+    }
+                  ]
+                },"category_rules": {
+                  Row: {
+                    "account_id": string | null,"amount_max_cents": number | null,"amount_min_cents": number | null,"created_at": string,"field": Database["public"]['Enums']["rule_field"],"household_id": string,"id": string,"match_type": Database["public"]['Enums']["rule_match"],"pattern": string,"priority": number,"set_category_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "account_id"?: string | null,"amount_max_cents"?: number | null,"amount_min_cents"?: number | null,"created_at"?: string,"field"?: Database["public"]['Enums']["rule_field"],"household_id": string,"id"?: string,"match_type"?: Database["public"]['Enums']["rule_match"],"pattern": string,"priority"?: number,"set_category_id": string
+                  }
+                  Update: {
+                    "account_id"?: string | null,"amount_max_cents"?: number | null,"amount_min_cents"?: number | null,"created_at"?: string,"field"?: Database["public"]['Enums']["rule_field"],"household_id"?: string,"id"?: string,"match_type"?: Database["public"]['Enums']["rule_match"],"pattern"?: string,"priority"?: number,"set_category_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "category_rules_household_id_account_id_fkey"
+      columns: ["household_id","account_id"]
+isOneToOne: false
+      referencedRelation: "accounts"
+      referencedColumns: ["household_id","id"]
+    },{
+      foreignKeyName: "category_rules_household_id_fkey"
+      columns: ["household_id"]
+isOneToOne: false
+      referencedRelation: "households"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "category_rules_household_id_set_category_id_fkey"
+      columns: ["household_id","set_category_id"]
+isOneToOne: false
+      referencedRelation: "categories"
+      referencedColumns: ["household_id","id"]
+    }
+                  ]
                 },"household_members": {
                   Row: {
                     "created_at": string,"display_name": string,"household_id": string,"role": Database["public"]['Enums']["member_role"],"split_weight": number,"user_id": string
@@ -131,14 +189,14 @@ isOneToOne: false
                   ]
                 },"transactions": {
                   Row: {
-                    "account_id": string,"amount_cents": number,"bank_category": string | null,"created_at": string,"display_description": string,"fingerprint": string | null,"household_id": string,"id": string,"import_id": string | null,"notes": string | null,"occurrence": number | null,"posted_on": string,"raw_description": string,"status": Database["public"]['Enums']["txn_status"],"updated_at": string
+                    "account_id": string,"amount_cents": number,"bank_category": string | null,"category_id": string | null,"category_source": Database["public"]['Enums']["category_source"],"created_at": string,"display_description": string,"fingerprint": string | null,"household_id": string,"id": string,"import_id": string | null,"notes": string | null,"occurrence": number | null,"posted_on": string,"raw_description": string,"status": Database["public"]['Enums']["txn_status"],"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "account_id": string,"amount_cents": number,"bank_category"?: string | null,"created_at"?: string,"display_description": string,"fingerprint"?: string | null,"household_id": string,"id"?: string,"import_id"?: string | null,"notes"?: string | null,"occurrence"?: number | null,"posted_on": string,"raw_description": string,"status": Database["public"]['Enums']["txn_status"],"updated_at"?: string
+                    "account_id": string,"amount_cents": number,"bank_category"?: string | null,"category_id"?: string | null,"category_source"?: Database["public"]['Enums']["category_source"],"created_at"?: string,"display_description": string,"fingerprint"?: string | null,"household_id": string,"id"?: string,"import_id"?: string | null,"notes"?: string | null,"occurrence"?: number | null,"posted_on": string,"raw_description": string,"status": Database["public"]['Enums']["txn_status"],"updated_at"?: string
                   }
                   Update: {
-                    "account_id"?: string,"amount_cents"?: number,"bank_category"?: string | null,"created_at"?: string,"display_description"?: string,"fingerprint"?: string | null,"household_id"?: string,"id"?: string,"import_id"?: string | null,"notes"?: string | null,"occurrence"?: number | null,"posted_on"?: string,"raw_description"?: string,"status"?: Database["public"]['Enums']["txn_status"],"updated_at"?: string
+                    "account_id"?: string,"amount_cents"?: number,"bank_category"?: string | null,"category_id"?: string | null,"category_source"?: Database["public"]['Enums']["category_source"],"created_at"?: string,"display_description"?: string,"fingerprint"?: string | null,"household_id"?: string,"id"?: string,"import_id"?: string | null,"notes"?: string | null,"occurrence"?: number | null,"posted_on"?: string,"raw_description"?: string,"status"?: Database["public"]['Enums']["txn_status"],"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -146,6 +204,12 @@ isOneToOne: false
       columns: ["household_id","account_id"]
 isOneToOne: false
       referencedRelation: "accounts"
+      referencedColumns: ["household_id","id"]
+    },{
+      foreignKeyName: "transactions_household_id_category_id_fkey"
+      columns: ["household_id","category_id"]
+isOneToOne: false
+      referencedRelation: "categories"
       referencedColumns: ["household_id","id"]
     },{
       foreignKeyName: "transactions_import_id_fkey"
@@ -170,14 +234,22 @@ isOneToOne: false
 "import_batch":
 { Args: { "p_account_id": string,"p_balance_cents"?: number,"p_exported_on": string,"p_file_sha256": string,"p_format": string,"p_original_filename": string,"p_rows": Json,"p_skip"?: (number)[],"p_storage_path": string }; Returns: Json
                            },
+"preview_category_rule":
+{ Args: { "p_account_id"?: string,"p_amount_max_cents"?: number,"p_amount_min_cents"?: number,"p_field": Database["public"]['Enums']["rule_field"],"p_match_type": Database["public"]['Enums']["rule_match"],"p_pattern": string }; Returns: {
+              "examples": (string)[],"manual": number,"matching": number
+            }[]
+                           },
 "preview_import":
 { Args: { "p_account_id": string,"p_rows": Json }; Returns: {
               "ordinal": number,"outcome": string,"suspect": Json
             }[]
+                           },
+"set_transaction_category":
+{ Args: { "p_category_id": string,"p_ids": (string)[] }; Returns: number
                            }
           }
           Enums: {
-            "account_type": "checking"|"savings"|"credit_card"|"mortgage"|"auto_loan"|"other_loan"|"other","member_role": "owner"|"member","txn_status": "posted"|"pending"
+            "account_type": "checking"|"savings"|"credit_card"|"mortgage"|"auto_loan"|"other_loan"|"other","category_kind": "expense"|"income"|"transfer","category_source": "none"|"rule"|"manual","member_role": "owner"|"member","rule_field": "description"|"bank_category","rule_match": "contains"|"starts_with"|"equals"|"regex","txn_status": "posted"|"pending"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -297,7 +369,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "account_type": ["checking", "savings", "credit_card", "mortgage", "auto_loan", "other_loan", "other"],"member_role": ["owner", "member"],"txn_status": ["posted", "pending"]
+            "account_type": ["checking", "savings", "credit_card", "mortgage", "auto_loan", "other_loan", "other"],"category_kind": ["expense", "income", "transfer"],"category_source": ["none", "rule", "manual"],"member_role": ["owner", "member"],"rule_field": ["description", "bank_category"],"rule_match": ["contains", "starts_with", "equals", "regex"],"txn_status": ["posted", "pending"]
           }
         }
 } as const

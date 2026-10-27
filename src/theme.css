@@ -67,3 +67,22 @@ ion-item.skipped {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+.uncategorized {
+  font-style: italic;
+}
+
+.link-like {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.kind-badge {
+  margin-left: 8px;
+  vertical-align: middle;
+  text-transform: capitalize;
+}

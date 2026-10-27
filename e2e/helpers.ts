@@ -31,3 +31,38 @@ export function activePage(page: Page) {
 export async function openTab(page: Page, tab: string) {
   await page.locator(`ion-tab-button[tab=${tab}]`).click();
 }
+
+export async function createHousehold(page: Page, householdName: string, myName: string) {
+  await page.getByText('Set up your household').waitFor();
+  await page.locator('ion-input').nth(0).locator('input').fill(householdName);
+  await page.locator('ion-input').nth(1).locator('input').fill(myName);
+  await page.getByRole('button', { name: 'Create household' }).click();
+  await expect(page.getByText('No accounts yet')).toBeVisible();
+}
+
+export async function addAccount(page: Page, name: string, institution = 'USAA') {
+  await openTab(page, 'accounts');
+  await page.getByRole('button', { name: 'Add account' }).first().click();
+  const modal = page.locator('ion-modal');
+  await modal.locator('ion-input').nth(0).locator('input').fill(name);
+  await modal.locator('ion-input').nth(1).locator('input').fill(institution);
+  await modal.getByRole('button', { name: 'Save' }).click();
+  await expect(activePage(page).locator('ion-item h2', { hasText: name })).toBeVisible();
+}
+
+export async function importCsv(page: Page, accountName: string, file: { name: string; buffer: Buffer }) {
+  await openTab(page, 'import');
+  await activePage(page).locator('ion-select').click();
+  await page.getByRole('radio', { name: accountName }).click();
+  await page.getByRole('button', { name: 'OK' }).click();
+  await page.getByTestId('csv-input').setInputFiles({ ...file, mimeType: 'text/csv' });
+  await page.getByRole('button', { name: /Import \d+ new transactions/ }).click();
+  await expect(page.getByTestId('import-result')).toBeVisible();
+}
+
+/** Picks a category in the open category picker by searching for it. */
+export async function pickCategory(page: Page, name: string) {
+  const picker = page.locator('ion-modal').filter({ has: page.getByTestId('category-picker') }).last();
+  await picker.locator('ion-searchbar input').fill(name);
+  await picker.getByTestId('category-picker').locator('ion-item', { hasText: name }).first().click();
+}

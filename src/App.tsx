@@ -19,9 +19,11 @@ import { AuthProvider, useAuth } from './auth/AuthProvider';
 import Placeholder from './components/Placeholder';
 import { HouseholdProvider, useHousehold } from './household/HouseholdProvider';
 import AccountsPage from './pages/AccountsPage';
+import CategoriesPage from './pages/CategoriesPage';
 import ImportPage from './pages/ImportPage';
 import LoginPage from './pages/LoginPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import RulesPage from './pages/RulesPage';
 import SettingsPage from './pages/SettingsPage';
 import SetupHouseholdPage from './pages/SetupHouseholdPage';
 import TransactionsPage from './pages/TransactionsPage';
@@ -54,6 +56,8 @@ function MainTabs() {
           <Route exact path="/import" component={ImportPage} />
           <Route exact path="/accounts" component={AccountsPage} />
           <Route exact path="/settings" component={SettingsPage} />
+          <Route exact path="/settings/categories" component={CategoriesPage} />
+          <Route exact path="/settings/rules" component={RulesPage} />
           <Route exact path="/">
             <Redirect to="/accounts" />
           </Route>

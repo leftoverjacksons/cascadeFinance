@@ -1,6 +1,6 @@
 # Cascade Finance — Design Document
 
-> Living document. Status: **v0.5 — Phases 1–2 implemented (foundation, CSV import); Phase 3 (categorisation) next.**
+> Living document. Status: **v0.6 — Phases 1–3 implemented (foundation, CSV import, categorisation); Phase 4 (overview) next.**
 > Update this file whenever a decision is made or reversed; record it in the Decision Log (§11).
 
 ---
@@ -228,7 +228,7 @@ Model:
 | 0 — Design | This document; collect sample exports from every account; settle open questions. |
 | 1 — Foundation ✅ | Supabase project, migrations, auth, household + RLS, accounts CRUD, CI/deploy. |
 | 2 — Import ✅ | USAA format, parser, preview, dedup RPC, import history, invariants as automated tests. |
-| 3 — Categorise | Category tree, rules engine, manual edit, bulk recategorise, transfer matching. |
+| 3 — Categorise ✅ | Category tree, rules engine, manual edit, bulk recategorise. (Transfer *pair linking* moved to 5a, where settlements need it.) |
 | 4 — Overview | Transactions list (search/filter), monthly cash flow, spending by category, balances, net worth. |
 | 5 — More formats | Credit card formats, savings, loans + balance snapshots. |
 | 5a — Shared expenses | `is_shared`, split ratio, joint contributions, settlement balance. |
@@ -258,6 +258,16 @@ Model:
 - Verified on the real 1,641-row USAA export (locally, file not committed): 0 parse errors, 1,633 posted + 8 pending, amount total identical to an independent computation; preview ≈0.2 s, import ≈0.3 s.
 - Tests: 31 pgTAP import tests (idempotency, identical same-day rows, pending replacement and stale-pending, order independence, suspects, skip, validation, isolation); 14 new unit tests; Playwright end-to-end suite (phone + desktop viewports) now runs in CI.
 - Deferred: balance reconciliation between snapshots (pending vs. posted balance semantics need care) → Phase 4. Undo of an import → later.
+
+**Phase 3 (done):**
+- Migration `20261027000002_categories.sql`: `categories` (two levels, kind inherited from group, archive instead of delete), `category_rules`, `transactions.category_id` + `category_source` (`none | rule | manual`), RPCs `preview_category_rule` and `set_transaction_category`.
+- **Change from §8:** rather than an explicit "re-run rules over history" action, non-manual categories are *always* the output of the current rule set. Any insert/update/delete of a rule re-categorises the household automatically (statement-level triggers), and imported rows are categorised on insert. The preview happens while authoring a rule (live match count + examples), which serves the same purpose as the planned re-run preview.
+- Rule fields: description (raw or display name) or bank category; match `contains | starts with | equals | regex` (case-insensitive, invalid regex rejected at write); optional account scope and absolute-amount range; priority (lower first; ties by creation time).
+- Seeded per household: 15 groups / 64 categories, ~53 bank-category mapping rules (priority 1000) and 2 internal-transfer description rules (priority 500). User rules default to priority 100, so they take precedence. Rehearsed on the real USAA export: 1,596 / 1,641 rows categorised automatically; the 45 left are rows USAA itself had not categorised.
+- Manual category on pending rows is rejected by the database (check constraint). "Reset to automatic" hands a row back to the rules immediately.
+- "Create a rule" from a transaction suggests a pattern from the bank description (fixed-width merchant field, processor prefixes such as `SQ *` and `TST*` removed, store numbers dropped), shows how many transactions it would match, and is pre-ticked.
+- Deferred: rules that rename (display name), transaction splits, transfer pair/chain linking (→ 5a).
+- Tests: 31 new pgTAP tests (88 total, verified to fail when the matcher is broken), 18 new unit tests (56 total), new Playwright scenario (automatic categories, manual + rule, Uncategorized filter, bulk edit, rule editor) on phone and desktop.
 
 ## 11. Open questions
 
@@ -294,3 +304,6 @@ Model:
 | 2026-10-27 | Pending rows read-only in UI | Replaced on every import; edits would be lost | Accepted |
 | 2026-10-27 | Suspected duplicates imported by default, user may skip | ±3-day same-amount heuristic has false positives (e.g. recurring small amounts) | Accepted |
 | 2026-10-27 | Fingerprinting and dedup live in SQL, not the client | Single authority; cannot be bypassed by a modified client | Accepted |
+| 2026-10-27 | Non-manual categories always reflect current rules; rule changes re-categorise automatically | Simpler mental model than a separate re-run step; authoring preview covers the safety need | Accepted |
+| 2026-10-27 | Seed bank-category mapping rules at low priority | Immediate ~97% coverage; fully editable; user rules win | Accepted |
+| 2026-10-27 | Transfer pair linking moved from Phase 3 to 5a | Spending totals only need the Transfer kind; linking matters for settlements | Accepted |

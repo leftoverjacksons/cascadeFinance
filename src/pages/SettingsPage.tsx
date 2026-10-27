@@ -89,6 +89,16 @@ export default function SettingsPage() {
           ))}
         </IonList>
 
+        <IonList inset>
+          <IonListHeader>Categorization</IonListHeader>
+          <IonItem routerLink="/settings/categories" detail>
+            <IonLabel>Categories</IonLabel>
+          </IonItem>
+          <IonItem routerLink="/settings/rules" detail>
+            <IonLabel>Rules</IonLabel>
+          </IonItem>
+        </IonList>
+
         {me.role === 'owner' && members.length < 2 && (
           <form onSubmit={addMember}>
             <IonList inset>
