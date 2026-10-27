@@ -238,7 +238,11 @@ export default function ImportPage() {
             </IonItem>
             <IonItem>
               <IonInput
-                label="Account balance when exported (optional)"
+                label={
+                  accounts.find((a) => a.id === accountId)?.is_liability
+                    ? 'Amount owed when exported (optional)'
+                    : 'Current balance when exported (optional)'
+                }
                 labelPlacement="stacked"
                 inputmode="decimal"
                 placeholder="e.g. 2,431.17"

@@ -31,3 +31,22 @@ export function parseAmountToCents(input: string): number | null {
   if (!Number.isSafeInteger(cents)) return null;
   return negative && cents !== 0 ? -cents : cents;
 }
+
+const compact = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  notation: 'compact',
+  maximumSignificantDigits: 2,
+});
+
+/** Short form for axes and tiles, e.g. "$1.2K", "-$45K". */
+export function formatCentsCompact(cents: number): string {
+  return compact.format(cents / 100);
+}
+
+const whole = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+
+/** Whole dollars, e.g. "$1,234". */
+export function formatCentsWhole(cents: number): string {
+  return whole.format(Math.round(cents / 100));
+}

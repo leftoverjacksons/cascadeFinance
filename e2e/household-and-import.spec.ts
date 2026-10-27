@@ -26,7 +26,7 @@ test('household setup, partner sharing, and idempotent CSV import', async ({ bro
   await page.locator('ion-input').nth(0).locator('input').fill('Test Household');
   await page.locator('ion-input').nth(1).locator('input').fill('Alex');
   await page.getByRole('button', { name: 'Create household' }).click();
-  await expect(page.getByText('No accounts yet')).toBeVisible();
+  await expect(page.locator('ion-tab-bar')).toBeVisible();
 
   await openTab(page, 'settings');
   const settings = activePage(page);
@@ -37,6 +37,7 @@ test('household setup, partner sharing, and idempotent CSV import', async ({ bro
 
   // ── Account ──
   await openTab(page, 'accounts');
+  await expect(page.getByText('No accounts yet')).toBeVisible();
   await page.getByRole('button', { name: 'Add account' }).first().click();
   const modal = page.locator('ion-modal');
   await modal.locator('ion-input').nth(0).locator('input').fill('Alex Checking');

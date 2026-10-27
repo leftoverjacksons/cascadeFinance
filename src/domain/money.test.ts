@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatCents, parseAmountToCents } from './money';
+import { formatCents, formatCentsCompact, formatCentsWhole, parseAmountToCents } from './money';
 
 describe('parseAmountToCents', () => {
   it.each([
@@ -32,5 +32,13 @@ describe('formatCents', () => {
   it('formats USD', () => {
     expect(formatCents(-13770)).toBe('-$137.70');
     expect(formatCents(317628)).toBe('$3,176.28');
+  });
+});
+
+describe('compact and whole formats', () => {
+  it('formats', () => {
+    expect(formatCentsCompact(123456)).toBe('$1.2K');
+    expect(formatCentsCompact(-4500000)).toBe('-$45K');
+    expect(formatCentsWhole(123456)).toBe('$1,235');
   });
 });

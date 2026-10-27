@@ -15,11 +15,13 @@ import {
   IonText,
   IonTitle,
   IonToolbar,
+  useIonActionSheet,
   useIonViewWillEnter,
 } from '@ionic/react';
 import { add } from 'ionicons/icons';
 import { useState } from 'react';
 import AccountFormModal from '../components/AccountFormModal';
+import BalanceModal from '../components/BalanceModal';
 import {
   ACCOUNT_GROUP_LABELS,
   ACCOUNT_TYPE_LABELS,
@@ -36,6 +38,8 @@ export default function AccountsPage() {
   const { accounts, balances, loading, error, refresh } = useAccounts();
   const [editing, setEditing] = useState<Account | null>(null);
   const [open, setOpen] = useState(false);
+  const [balanceFor, setBalanceFor] = useState<Account | null>(null);
+  const [actions] = useIonActionSheet();
   useIonViewWillEnter(() => void refresh());
 
   const ownerName = (id: string | null) =>
@@ -82,7 +86,21 @@ export default function AccountsPage() {
           <IonList key={group} inset>
             <IonListHeader>{ACCOUNT_GROUP_LABELS[group]}</IonListHeader>
             {list.map((a) => (
-              <IonItem key={a.id} button detail onClick={() => openEditor(a)}>
+              <IonItem
+                key={a.id}
+                button
+                detail
+                onClick={() =>
+                  void actions({
+                    header: a.name,
+                    buttons: [
+                      { text: 'Record balance', handler: () => setBalanceFor(a) },
+                      { text: 'Edit account', handler: () => openEditor(a) },
+                      { text: 'Cancel', role: 'cancel' },
+                    ],
+                  })
+                }
+              >
                 <IonLabel>
                   <h2>
                     {a.name}
@@ -96,6 +114,7 @@ export default function AccountsPage() {
                 </IonLabel>
                 {balances.has(a.id) && (
                   <IonNote slot="end" className="balance">
+                    {a.is_liability && 'owes '}
                     {formatCents(balances.get(a.id)!.balance_cents)}
                     <br />
                     <small>as of {formatDay(balances.get(a.id)!.as_of)}</small>
@@ -118,6 +137,13 @@ export default function AccountsPage() {
           </IonList>
         )}
       </IonContent>
+      <BalanceModal
+        account={balanceFor}
+        onClose={(changed) => {
+          setBalanceFor(null);
+          if (changed) void refresh();
+        }}
+      />
       <AccountFormModal
         isOpen={open}
         account={editing}

@@ -1,6 +1,6 @@
 # Cascade Finance — Design Document
 
-> Living document. Status: **v0.6 — Phases 1–3 implemented (foundation, CSV import, categorisation); Phase 4 (overview) next.**
+> Living document. Status: **v0.7 — Phases 1–4 implemented (foundation, import, categorisation, overview); next: 5 (more formats) / 5a (shared expenses).**
 > Update this file whenever a decision is made or reversed; record it in the Decision Log (§11).
 
 ---
@@ -229,7 +229,7 @@ Model:
 | 1 — Foundation ✅ | Supabase project, migrations, auth, household + RLS, accounts CRUD, CI/deploy. |
 | 2 — Import ✅ | USAA format, parser, preview, dedup RPC, import history, invariants as automated tests. |
 | 3 — Categorise ✅ | Category tree, rules engine, manual edit, bulk recategorise. (Transfer *pair linking* moved to 5a, where settlements need it.) |
-| 4 — Overview | Transactions list (search/filter), monthly cash flow, spending by category, balances, net worth. |
+| 4 — Overview ✅ | Transactions list (search/filter), monthly cash flow, spending by category, balances, net worth. |
 | 5 — More formats | Credit card formats, savings, loans + balance snapshots. |
 | 5a — Shared expenses | `is_shared`, split ratio, joint contributions, settlement balance. |
 | 6 — Budgets & trends | After ~2–3 months of categorised data: per-category monthly targets vs actuals; recurring-charge detection. |
@@ -269,6 +269,17 @@ Model:
 - Deferred: rules that rename (display name), transaction splits, transfer pair/chain linking (→ 5a).
 - Tests: 31 new pgTAP tests (88 total, verified to fail when the matcher is broken), 18 new unit tests (56 total), new Playwright scenario (automatic categories, manual + rule, Uncategorized filter, bulk edit, rule editor) on phone and desktop.
 
+**Phase 4 (done):**
+- Migration `20261028000001_reports.sql`: `monthly_category_totals(from, to)` and `balance_history(dates[])`, both `SECURITY INVOKER` (read through RLS). Pending rows excluded.
+- Overview is trend-first (household preference): period 6 / 12 / 24 months; tiles for average monthly spending, income and saved (full months only; the current month is shown as "so far" and excluded from averages) and net worth.
+- Money conventions: Transfer-kind categories excluded from income and spending; expense categories are netted (refunds reduce spending); uncategorised money out counts as spending, money in as income.
+- Charts (Chart.js 4): monthly income vs spending (grouped bars); spending by group (stacked, top 6 groups + Other, with a table underneath that expands to categories); net worth (line). Palette is the validated categorical order, separately stepped for light and dark and checked with the palette validator against both surfaces. Group colours are chosen over the full 24-month history so switching the period never recolours a group. Months where a group's refunds exceed its spending are drawn at zero; tooltip and table show the net figure.
+- Balances: "Record balance" on any account (statement balances; liabilities entered as amount owed). Balance at any date = nearest snapshot (latest on/before, else earliest after) rolled with posted transactions. Net worth includes only accounts that have at least one recorded balance, and says how many.
+- Interpretation note: "saved" = income − spending, transfers excluded. Until every account is imported, money moved to other accounts counts as saved even though it left the imported account.
+- Also fixed: primary colour was unreadable in dark mode (lighter step for dark).
+- Tests: 12 new pgTAP tests (100 total); 9 new unit tests; new Playwright overview scenario (statement balance, net worth, table expansion, period switch).
+- Deferred: the planned balance *reconciliation* check between consecutive exports; per-category drill-down into the transaction list.
+
 ## 11. Open questions
 
 1. **Credit card samples** (tabled): one export each from Amex, Discover, IKEA card; Member 1's cards, if any.
@@ -307,3 +318,5 @@ Model:
 | 2026-10-27 | Non-manual categories always reflect current rules; rule changes re-categorise automatically | Simpler mental model than a separate re-run step; authoring preview covers the safety need | Accepted |
 | 2026-10-27 | Seed bank-category mapping rules at low priority | Immediate ~97% coverage; fully editable; user rules win | Accepted |
 | 2026-10-27 | Transfer pair linking moved from Phase 3 to 5a | Spending totals only need the Transfer kind; linking matters for settlements | Accepted |
+| 2026-10-28 | Overview is trend-first, 12 months default | Household preference | Accepted |
+| 2026-10-28 | Loans tracked by statement balances only (no amortisation) | Household preference | Accepted |

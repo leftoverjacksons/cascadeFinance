@@ -228,11 +228,21 @@ isOneToOne: false
             "add_household_member":
 { Args: { "p_display_name": string,"p_email": string }; Returns: string
                            },
+"balance_history":
+{ Args: { "p_dates": (string)[] }; Returns: {
+              "account_id": string,"anchor_date": string,"as_of": string,"balance_cents": number
+            }[]
+                           },
 "create_household":
 { Args: { "p_display_name": string,"p_name": string }; Returns: string
                            },
 "import_batch":
 { Args: { "p_account_id": string,"p_balance_cents"?: number,"p_exported_on": string,"p_file_sha256": string,"p_format": string,"p_original_filename": string,"p_rows": Json,"p_skip"?: (number)[],"p_storage_path": string }; Returns: Json
+                           },
+"monthly_category_totals":
+{ Args: { "p_from": string,"p_to": string }; Returns: {
+              "category_id": string,"inflow_cents": number,"month": string,"outflow_cents": number,"txn_count": number
+            }[]
                            },
 "preview_category_rule":
 { Args: { "p_account_id"?: string,"p_amount_max_cents"?: number,"p_amount_min_cents"?: number,"p_field": Database["public"]['Enums']["rule_field"],"p_match_type": Database["public"]['Enums']["rule_match"],"p_pattern": string }; Returns: {

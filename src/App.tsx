@@ -16,12 +16,12 @@ import { IonReactHashRouter } from '@ionic/react-router';
 import { cloudUploadOutline, homeOutline, listOutline, settingsOutline, walletOutline } from 'ionicons/icons';
 import { Redirect, Route } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
-import Placeholder from './components/Placeholder';
 import { HouseholdProvider, useHousehold } from './household/HouseholdProvider';
 import AccountsPage from './pages/AccountsPage';
 import CategoriesPage from './pages/CategoriesPage';
 import ImportPage from './pages/ImportPage';
 import LoginPage from './pages/LoginPage';
+import OverviewPage from './pages/OverviewPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import RulesPage from './pages/RulesPage';
 import SettingsPage from './pages/SettingsPage';
@@ -47,11 +47,7 @@ function MainTabs() {
     <IonReactHashRouter>
       <IonTabs>
         <IonRouterOutlet>
-          <Route exact path="/overview">
-            <Placeholder title="Overview">
-              <p>Cash flow, spending by category and net worth arrive in Phase 4.</p>
-            </Placeholder>
-          </Route>
+          <Route exact path="/overview" component={OverviewPage} />
           <Route exact path="/transactions" component={TransactionsPage} />
           <Route exact path="/import" component={ImportPage} />
           <Route exact path="/accounts" component={AccountsPage} />
@@ -59,7 +55,7 @@ function MainTabs() {
           <Route exact path="/settings/categories" component={CategoriesPage} />
           <Route exact path="/settings/rules" component={RulesPage} />
           <Route exact path="/">
-            <Redirect to="/accounts" />
+            <Redirect to="/overview" />
           </Route>
         </IonRouterOutlet>
         <IonTabBar slot="bottom">

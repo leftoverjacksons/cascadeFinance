@@ -37,25 +37,36 @@ export async function createHousehold(page: Page, householdName: string, myName:
   await page.locator('ion-input').nth(0).locator('input').fill(householdName);
   await page.locator('ion-input').nth(1).locator('input').fill(myName);
   await page.getByRole('button', { name: 'Create household' }).click();
-  await expect(page.getByText('No accounts yet')).toBeVisible();
+  await expect(page.locator('ion-tab-bar')).toBeVisible();
 }
 
-export async function addAccount(page: Page, name: string, institution = 'USAA') {
+export async function addAccount(page: Page, name: string, institution = 'USAA', type?: string) {
   await openTab(page, 'accounts');
   await page.getByRole('button', { name: 'Add account' }).first().click();
-  const modal = page.locator('ion-modal');
+  const modal = page.locator('ion-modal').filter({ hasText: 'New account' });
   await modal.locator('ion-input').nth(0).locator('input').fill(name);
   await modal.locator('ion-input').nth(1).locator('input').fill(institution);
+  if (type) {
+    await modal.locator('ion-select').first().click();
+    await page.getByRole('radio', { name: type }).click();
+    await page.getByRole('button', { name: 'OK' }).click();
+  }
   await modal.getByRole('button', { name: 'Save' }).click();
   await expect(activePage(page).locator('ion-item h2', { hasText: name })).toBeVisible();
 }
 
-export async function importCsv(page: Page, accountName: string, file: { name: string; buffer: Buffer }) {
+export async function importCsv(
+  page: Page,
+  accountName: string,
+  file: { name: string; buffer: Buffer },
+  balance?: string,
+) {
   await openTab(page, 'import');
   await activePage(page).locator('ion-select').click();
   await page.getByRole('radio', { name: accountName }).click();
   await page.getByRole('button', { name: 'OK' }).click();
   await page.getByTestId('csv-input').setInputFiles({ ...file, mimeType: 'text/csv' });
+  if (balance) await activePage(page).locator('ion-input').nth(1).locator('input').fill(balance);
   await page.getByRole('button', { name: /Import \d+ new transactions/ }).click();
   await expect(page.getByTestId('import-result')).toBeVisible();
 }
