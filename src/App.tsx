@@ -19,10 +19,12 @@ import { AuthProvider, useAuth } from './auth/AuthProvider';
 import Placeholder from './components/Placeholder';
 import { HouseholdProvider, useHousehold } from './household/HouseholdProvider';
 import AccountsPage from './pages/AccountsPage';
+import ImportPage from './pages/ImportPage';
 import LoginPage from './pages/LoginPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import SettingsPage from './pages/SettingsPage';
 import SetupHouseholdPage from './pages/SetupHouseholdPage';
+import TransactionsPage from './pages/TransactionsPage';
 
 setupIonicReact();
 
@@ -48,16 +50,8 @@ function MainTabs() {
               <p>Cash flow, spending by category and net worth arrive in Phase 4.</p>
             </Placeholder>
           </Route>
-          <Route exact path="/transactions">
-            <Placeholder title="Transactions">
-              <p>Transactions appear here once CSV import is built (Phase 2).</p>
-            </Placeholder>
-          </Route>
-          <Route exact path="/import">
-            <Placeholder title="Import">
-              <p>CSV import with preview and duplicate detection is Phase 2.</p>
-            </Placeholder>
-          </Route>
+          <Route exact path="/transactions" component={TransactionsPage} />
+          <Route exact path="/import" component={ImportPage} />
           <Route exact path="/accounts" component={AccountsPage} />
           <Route exact path="/settings" component={SettingsPage} />
           <Route exact path="/">

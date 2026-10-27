@@ -8,12 +8,14 @@ import {
   IonLabel,
   IonList,
   IonListHeader,
+  IonNote,
   IonPage,
   IonRefresher,
   IonRefresherContent,
   IonText,
   IonTitle,
   IonToolbar,
+  useIonViewWillEnter,
 } from '@ionic/react';
 import { add } from 'ionicons/icons';
 import { useState } from 'react';
@@ -24,14 +26,17 @@ import {
   groupAccounts,
   type Account,
 } from '../domain/accounts';
+import { formatDay } from '../domain/dates';
+import { formatCents } from '../domain/money';
 import { useRequiredHousehold } from '../household/HouseholdProvider';
 import { useAccounts } from '../household/useAccounts';
 
 export default function AccountsPage() {
   const { members } = useRequiredHousehold();
-  const { accounts, loading, error, refresh } = useAccounts();
+  const { accounts, balances, loading, error, refresh } = useAccounts();
   const [editing, setEditing] = useState<Account | null>(null);
   const [open, setOpen] = useState(false);
+  useIonViewWillEnter(() => void refresh());
 
   const ownerName = (id: string | null) =>
     id ? (members.find((m) => m.user_id === id)?.display_name ?? 'Unknown') : 'Joint';
@@ -89,6 +94,13 @@ export default function AccountsPage() {
                       .join(' · ')}
                   </p>
                 </IonLabel>
+                {balances.has(a.id) && (
+                  <IonNote slot="end" className="balance">
+                    {formatCents(balances.get(a.id)!.balance_cents)}
+                    <br />
+                    <small>as of {formatDay(balances.get(a.id)!.as_of)}</small>
+                  </IonNote>
+                )}
               </IonItem>
             ))}
           </IonList>

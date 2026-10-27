@@ -49,6 +49,32 @@ isOneToOne: false
       referencedColumns: ["household_id","user_id"]
     }
                   ]
+                },"balance_snapshots": {
+                  Row: {
+                    "account_id": string,"as_of": string,"balance_cents": number,"created_at": string,"household_id": string,"id": string,"import_id": string | null,"source": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "account_id": string,"as_of": string,"balance_cents": number,"created_at"?: string,"household_id": string,"id"?: string,"import_id"?: string | null,"source": string
+                  }
+                  Update: {
+                    "account_id"?: string,"as_of"?: string,"balance_cents"?: number,"created_at"?: string,"household_id"?: string,"id"?: string,"import_id"?: string | null,"source"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "balance_snapshots_household_id_account_id_fkey"
+      columns: ["household_id","account_id"]
+isOneToOne: false
+      referencedRelation: "accounts"
+      referencedColumns: ["household_id","id"]
+    },{
+      foreignKeyName: "balance_snapshots_import_id_fkey"
+      columns: ["import_id"]
+isOneToOne: false
+      referencedRelation: "imports"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"household_members": {
                   Row: {
                     "created_at": string,"display_name": string,"household_id": string,"role": Database["public"]['Enums']["member_role"],"split_weight": number,"user_id": string
@@ -83,6 +109,52 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"imports": {
+                  Row: {
+                    "account_id": string,"balance_at_export_cents": number | null,"created_at": string,"date_max": string | null,"date_min": string | null,"exported_on": string,"file_sha256": string,"format": string,"household_id": string,"id": string,"original_filename": string,"pending_replaced": boolean,"rows_duplicate": number,"rows_inserted": number,"rows_pending": number,"rows_skipped": number,"rows_total": number,"storage_path": string,"uploaded_by": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "account_id": string,"balance_at_export_cents"?: number | null,"created_at"?: string,"date_max"?: string | null,"date_min"?: string | null,"exported_on": string,"file_sha256": string,"format": string,"household_id": string,"id"?: string,"original_filename": string,"pending_replaced"?: boolean,"rows_duplicate"?: number,"rows_inserted"?: number,"rows_pending"?: number,"rows_skipped"?: number,"rows_total"?: number,"storage_path": string,"uploaded_by"?: string | null
+                  }
+                  Update: {
+                    "account_id"?: string,"balance_at_export_cents"?: number | null,"created_at"?: string,"date_max"?: string | null,"date_min"?: string | null,"exported_on"?: string,"file_sha256"?: string,"format"?: string,"household_id"?: string,"id"?: string,"original_filename"?: string,"pending_replaced"?: boolean,"rows_duplicate"?: number,"rows_inserted"?: number,"rows_pending"?: number,"rows_skipped"?: number,"rows_total"?: number,"storage_path"?: string,"uploaded_by"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "imports_household_id_account_id_fkey"
+      columns: ["household_id","account_id"]
+isOneToOne: false
+      referencedRelation: "accounts"
+      referencedColumns: ["household_id","id"]
+    }
+                  ]
+                },"transactions": {
+                  Row: {
+                    "account_id": string,"amount_cents": number,"bank_category": string | null,"created_at": string,"display_description": string,"fingerprint": string | null,"household_id": string,"id": string,"import_id": string | null,"notes": string | null,"occurrence": number | null,"posted_on": string,"raw_description": string,"status": Database["public"]['Enums']["txn_status"],"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "account_id": string,"amount_cents": number,"bank_category"?: string | null,"created_at"?: string,"display_description": string,"fingerprint"?: string | null,"household_id": string,"id"?: string,"import_id"?: string | null,"notes"?: string | null,"occurrence"?: number | null,"posted_on": string,"raw_description": string,"status": Database["public"]['Enums']["txn_status"],"updated_at"?: string
+                  }
+                  Update: {
+                    "account_id"?: string,"amount_cents"?: number,"bank_category"?: string | null,"created_at"?: string,"display_description"?: string,"fingerprint"?: string | null,"household_id"?: string,"id"?: string,"import_id"?: string | null,"notes"?: string | null,"occurrence"?: number | null,"posted_on"?: string,"raw_description"?: string,"status"?: Database["public"]['Enums']["txn_status"],"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "transactions_household_id_account_id_fkey"
+      columns: ["household_id","account_id"]
+isOneToOne: false
+      referencedRelation: "accounts"
+      referencedColumns: ["household_id","id"]
+    },{
+      foreignKeyName: "transactions_import_id_fkey"
+      columns: ["import_id"]
+isOneToOne: false
+      referencedRelation: "imports"
+      referencedColumns: ["id"]
+    }
+                  ]
                 }
           }
           Views: {
@@ -94,10 +166,18 @@ isOneToOne: false
                            },
 "create_household":
 { Args: { "p_display_name": string,"p_name": string }; Returns: string
+                           },
+"import_batch":
+{ Args: { "p_account_id": string,"p_balance_cents"?: number,"p_exported_on": string,"p_file_sha256": string,"p_format": string,"p_original_filename": string,"p_rows": Json,"p_skip"?: (number)[],"p_storage_path": string }; Returns: Json
+                           },
+"preview_import":
+{ Args: { "p_account_id": string,"p_rows": Json }; Returns: {
+              "ordinal": number,"outcome": string,"suspect": Json
+            }[]
                            }
           }
           Enums: {
-            "account_type": "checking"|"savings"|"credit_card"|"mortgage"|"auto_loan"|"other_loan"|"other","member_role": "owner"|"member"
+            "account_type": "checking"|"savings"|"credit_card"|"mortgage"|"auto_loan"|"other_loan"|"other","member_role": "owner"|"member","txn_status": "posted"|"pending"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -217,7 +297,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "account_type": ["checking", "savings", "credit_card", "mortgage", "auto_loan", "other_loan", "other"],"member_role": ["owner", "member"]
+            "account_type": ["checking", "savings", "credit_card", "mortgage", "auto_loan", "other_loan", "other"],"member_role": ["owner", "member"],"txn_status": ["posted", "pending"]
           }
         }
 } as const

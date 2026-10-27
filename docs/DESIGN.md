@@ -1,6 +1,6 @@
 # Cascade Finance — Design Document
 
-> Living document. Status: **v0.4 — Phase 1 (foundation) implemented; Phase 2 (import) next.**
+> Living document. Status: **v0.5 — Phases 1–2 implemented (foundation, CSV import); Phase 3 (categorisation) next.**
 > Update this file whenever a decision is made or reversed; record it in the Decision Log (§11).
 
 ---
@@ -227,7 +227,7 @@ Model:
 |---|---|
 | 0 — Design | This document; collect sample exports from every account; settle open questions. |
 | 1 — Foundation ✅ | Supabase project, migrations, auth, household + RLS, accounts CRUD, CI/deploy. |
-| 2 — Import | USAA format, parser, preview, dedup RPC, import history, invariants as automated tests. |
+| 2 — Import ✅ | USAA format, parser, preview, dedup RPC, import history, invariants as automated tests. |
 | 3 — Categorise | Category tree, rules engine, manual edit, bulk recategorise, transfer matching. |
 | 4 — Overview | Transactions list (search/filter), monthly cash flow, spending by category, balances, net worth. |
 | 5 — More formats | Credit card formats, savings, loans + balance snapshots. |
@@ -246,6 +246,18 @@ Model:
 - App: login, password reset, household setup, add partner, accounts CRUD (grouped Cash / Credit / Loans), split setting, placeholder tabs for later phases. Hash-based routing (GitHub Pages has no SPA fallback); PKCE auth flow so reset links do not collide with hash routes.
 - CI: typecheck, unit tests, build, migrations + pgTAP on local Supabase, generated-types drift check. Deploy on `main`: CI → `supabase db push` → GitHub Pages.
 - Not yet automated: browser end-to-end tests (Playwright). Phase 1 flows were verified manually with a Playwright script against local Supabase (two users, household creation, partner add, split change persisted, shared account visible to partner); to be committed as a CI suite in Phase 2.
+
+**Phase 2 (done):**
+- Migration `20261027000001_import.sql`: `imports`, `transactions`, `balance_snapshots`; RPCs `preview_import` (read-only classification) and `import_batch` (atomic insert). Child tables reference `(household_id, account_id)` so a row can never point at another household's account.
+- Clients cannot insert or delete transactions, nor change amounts/dates; they may edit only `display_description` and `notes` (column grants). Pending rows are read-only in the UI.
+- Fingerprint = sha256(date | cents | upper-cased, whitespace-collapsed raw description); occurrence numbered within the file. Implemented in SQL, so the database is the single authority.
+- Stale-pending rule: an import replaces the account's pending rows only if no import with a *later* `exported_on` exists.
+- Suspected duplicates: a new row with the same amount within ±3 days of an existing posted row that the file does not itself account for. Shown for review, imported unless the user ticks *skip*.
+- Archive: original file uploaded unmodified to `imports/{household}/{account}/{exported_on}_{sha256[:16]}.csv`, plus `.meta.json` sidecar. Identical file for the same account is detected before import (hash lookup) and refused by the database (unique constraint).
+- Parsing in the browser (PapaParse) via a format registry (`src/import/formats/`); format auto-detected from the header row. Only `usaa_bank` exists so far.
+- Verified on the real 1,641-row USAA export (locally, file not committed): 0 parse errors, 1,633 posted + 8 pending, amount total identical to an independent computation; preview ≈0.2 s, import ≈0.3 s.
+- Tests: 31 pgTAP import tests (idempotency, identical same-day rows, pending replacement and stale-pending, order independence, suspects, skip, validation, isolation); 14 new unit tests; Playwright end-to-end suite (phone + desktop viewports) now runs in CI.
+- Deferred: balance reconciliation between snapshots (pending vs. posted balance semantics need care) → Phase 4. Undo of an import → later.
 
 ## 11. Open questions
 
@@ -279,3 +291,6 @@ Model:
 | 2026-10-26 | Schema deployed automatically from `main` via GitHub Actions (`supabase db push`) | Household preference; keeps DB and code in lockstep | Accepted |
 | 2026-10-26 | Public GitHub repo; GitHub Pages hosting | Household preference; no data in repo | Accepted |
 | 2026-10-26 | Split stored as per-member weights | Generalises the configurable 50/50 default | Accepted |
+| 2026-10-27 | Pending rows read-only in UI | Replaced on every import; edits would be lost | Accepted |
+| 2026-10-27 | Suspected duplicates imported by default, user may skip | ±3-day same-amount heuristic has false positives (e.g. recurring small amounts) | Accepted |
+| 2026-10-27 | Fingerprinting and dedup live in SQL, not the client | Single authority; cannot be bypassed by a modified client | Accepted |

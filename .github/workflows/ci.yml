@@ -22,7 +22,7 @@ jobs:
       - run: npm run build
 
   database:
-    name: Migrations and access-control tests
+    name: Database and end-to-end tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,3 +39,13 @@ jobs:
         run: |
           npm run -s db:types
           git diff --exit-code src/lib/database.types.ts
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: End-to-end tests (phone and desktop)
+        run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7

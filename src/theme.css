@@ -39,3 +39,31 @@ ion-list.list-inset {
   justify-content: center;
   padding-top: 20vh;
 }
+
+.credit {
+  color: var(--ion-color-success);
+}
+
+.amount {
+  font-variant-numeric: tabular-nums;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+}
+
+ion-item.skipped {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.narrow-block {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.balance {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
