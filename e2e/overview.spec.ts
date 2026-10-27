@@ -18,12 +18,15 @@ test('overview: KPIs, spending table, statement balance and net worth', async ({
 
   // Statement balance for the loan, entered as the amount owed.
   await openTab(page, 'accounts');
-  await activePage(page).locator('ion-item', { hasText: 'Car Loan' }).click();
+  // Only the visible account row: hidden pages (e.g. Import's account picker)
+  // also contain the account name.
+  const loanRow = page.locator('ion-item:visible', { has: page.locator('h2', { hasText: 'Car Loan' }) });
+  await loanRow.click();
   await page.getByRole('button', { name: 'Record balance' }).click();
   const modal = page.locator('ion-modal').filter({ hasText: 'Record balance' });
   await modal.locator('ion-input').nth(1).locator('input').fill('18,000');
   await modal.getByRole('button', { name: 'Save' }).click();
-  await expect(activePage(page).locator('ion-item', { hasText: 'Car Loan' })).toContainText('owes $18,000.00');
+  await expect(loanRow).toContainText('owes $18,000.00');
 
   await openTab(page, 'overview');
   const overview = activePage(page);
