@@ -343,14 +343,14 @@ isOneToOne: false
                   ]
                 },"user_preferences": {
                   Row: {
-                    "dashboard_layout": Json | null,"updated_at": string,"user_id": string
+                    "dashboard_layout": Json | null,"sankey_positions": Json | null,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "dashboard_layout"?: Json | null,"updated_at"?: string,"user_id"?: string
+                    "dashboard_layout"?: Json | null,"sankey_positions"?: Json | null,"updated_at"?: string,"user_id"?: string
                   }
                   Update: {
-                    "dashboard_layout"?: Json | null,"updated_at"?: string,"user_id"?: string
+                    "dashboard_layout"?: Json | null,"sankey_positions"?: Json | null,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     
@@ -389,6 +389,33 @@ isOneToOne: false
               "amount_cents": number,"counted": boolean,"from_account": string,"from_user": string,"kind": string,"link_id": string,"out_txn_id": string,"received_on": string,"sent_on": string,"to_account": string,"to_user": string
             }[]
                            },
+"money_flow_transactions":
+{ Args: { "p_from": string,"p_kinds": (string)[],"p_sources": (string)[],"p_targets": (string)[],"p_to": string }; Returns: {
+              "account_id": string,
+"amount_cents": number,
+"bank_category": string | null,
+"category_id": string | null,
+"category_source": Database["public"]['Enums']["category_source"],
+"created_at": string,
+"display_description": string,
+"fingerprint": string | null,
+"household_id": string,
+"id": string,
+"import_id": string | null,
+"notes": string | null,
+"occurrence": number | null,
+"posted_on": string,
+"raw_description": string,
+"shared_override": boolean | null,
+"status": Database["public"]['Enums']["txn_status"],
+"updated_at": string
+            }[]
+                          SetofOptions: {
+        from: "*"
+        to: "transactions"
+        isOneToOne: false
+        isSetofReturn: true
+      } },
 "money_flows":
 { Args: { "p_from": string,"p_to": string }; Returns: {
               "cents": number,"kind": string,"source": string,"target": string

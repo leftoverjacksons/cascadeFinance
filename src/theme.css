@@ -748,3 +748,15 @@ button.sort {
     animation: none;
   }
 }
+
+.sankey-link {
+  cursor: pointer;
+}
+
+.flows-selection {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 0.85rem;
+  margin: 4px 0;
+}

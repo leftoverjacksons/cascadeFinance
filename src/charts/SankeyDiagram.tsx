@@ -10,7 +10,15 @@ interface Props {
   label: string;
   /** Fixed height in px; omit to fill the parent (e.g. a resizable panel). */
   height?: number;
+  /** Dragged node offsets, as fractions of the diagram's width and height. */
+  positions: SankeyPositions;
+  onPositionsChange: (positions: SankeyPositions) => void;
+  /** Selected link ("from>to"): stays highlighted. */
+  selected: string | null;
+  onSelect: (link: string | null) => void;
 }
+
+export type SankeyPositions = Record<string, { x: number; y: number }>;
 
 /** Room above and below so labels on the outermost nodes are not clipped. */
 const MARGIN = 10;
@@ -32,18 +40,24 @@ interface Drag {
   dy: number;
 }
 
-type Offsets = Record<string, { dx: number; dy: number }>;
-
 /**
  * Interactive money-flow diagram drawn as SVG: hover for amounts, drag a node
- * to move it (its flows follow). Colours follow the light/dark theme through
- * CSS variables.
+ * to move it (its flows follow), click a flow to select it. Colours follow the
+ * light/dark theme through CSS variables.
  */
-export default function SankeyDiagram({ graph, colorOf, label, height }: Props) {
+export default function SankeyDiagram({
+  graph,
+  colorOf,
+  label,
+  height,
+  positions,
+  onPositionsChange,
+  selected,
+  onSelect,
+}: Props) {
   const box = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [hover, setHover] = useState<Hover | null>(null);
-  const [offsets, setOffsets] = useState<Offsets>({});
   const drag = useRef<Drag | null>(null);
   const uid = useId().replace(/:/g, '');
 
@@ -74,7 +88,10 @@ export default function SankeyDiagram({ graph, colorOf, label, height }: Props) 
   );
   // Apply dragged offsets to nodes and the ends of their links.
   const moved = useMemo(() => {
-    const off = (key: string) => offsets[key] ?? { dx: 0, dy: 0 };
+    const off = (key: string) => {
+      const p = positions[key];
+      return p ? { dx: p.x * size.width, dy: p.y * size.height } : { dx: 0, dy: 0 };
+    };
     return {
       nodes: placed.nodes.map((n) => {
         const { dx, dy } = off(n.key);
@@ -88,7 +105,7 @@ export default function SankeyDiagram({ graph, colorOf, label, height }: Props) 
         ty: l.ty + off(l.to).dy,
       })),
     };
-  }, [placed, offsets]);
+  }, [placed, positions, size]);
 
   const color = useMemo(() => new Map(graph.nodes.map((n) => [n.key, colorOf(n)])), [graph, colorOf]);
   const labelOf = (key: string) => graph.nodes.find((n) => n.key === key)?.label ?? key;
@@ -98,14 +115,16 @@ export default function SankeyDiagram({ graph, colorOf, label, height }: Props) 
     const r = box.current!.getBoundingClientRect();
     setHover({ key, text, x: e.clientX - r.left, y: e.clientY - r.top });
   };
-  // Hovering a node highlights its links; hovering a link highlights that link.
+  // The selected link and whatever is hovered (a node's links, or a link) are highlighted.
+  const matches = (key: string | undefined | null, from: string, to: string) =>
+    key === from || key === to || key === `${from}>${to}`;
   const lit = (from: string, to: string) =>
-    !hover || hover.key === from || hover.key === to || hover.key === `${from}>${to}`;
+    (!hover && !selected) || matches(hover?.key, from, to) || matches(selected, from, to);
 
   const startDrag = (key: string) => (e: React.PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId);
-    const { dx, dy } = offsets[key] ?? { dx: 0, dy: 0 };
-    drag.current = { key, startX: e.clientX, startY: e.clientY, dx, dy };
+    const p = positions[key] ?? { x: 0, y: 0 };
+    drag.current = { key, startX: e.clientX, startY: e.clientY, dx: p.x * size.width, dy: p.y * size.height };
   };
   const moveDrag = (e: React.PointerEvent) => {
     const d = drag.current;
@@ -115,7 +134,9 @@ export default function SankeyDiagram({ graph, colorOf, label, height }: Props) 
     // Keep the node inside the drawing area.
     const dx = clamp(d.dx + e.clientX - d.startX, -n.x0, size.width - n.x1);
     const dy = clamp(d.dy + e.clientY - d.startY, -n.y0 - MARGIN, size.height - MARGIN - n.y1);
-    setOffsets((o) => ({ ...o, [d.key]: { dx, dy } }));
+    if (size.width && size.height) {
+      onPositionsChange({ ...positions, [d.key]: { x: dx / size.width, y: dy / size.height } });
+    }
   };
   const endDrag = () => {
     drag.current = null;
@@ -128,8 +149,8 @@ export default function SankeyDiagram({ graph, colorOf, label, height }: Props) 
       style={{ height: height ?? '100%', position: 'relative' }}
       onPointerLeave={() => setHover(null)}
     >
-      {Object.keys(offsets).length > 0 && (
-        <button className="link-like sankey-reset" onClick={() => setOffsets({})}>
+      {Object.keys(positions).length > 0 && (
+        <button className="link-like sankey-reset" onClick={() => onPositionsChange({})}>
           Reset layout
         </button>
       )}
@@ -146,13 +167,17 @@ export default function SankeyDiagram({ graph, colorOf, label, height }: Props) 
           <g fill="none" className="sankey-links">
             {moved.links.map((l, i) => {
               const xm = (l.sx + l.tx) / 2;
+              const key = `${l.from}>${l.to}`;
               return (
                 <path
-                  key={`${l.from}>${l.to}`}
+                  key={key}
+                  data-link={key}
+                  className={key === selected ? 'sankey-link selected' : 'sankey-link'}
                   d={`M${l.sx},${l.sy}C${xm},${l.sy} ${xm},${l.ty} ${l.tx},${l.ty}`}
                   stroke={`url(#${uid}-${i})`}
                   strokeWidth={Math.max(1, l.width)}
-                  strokeOpacity={lit(l.from, l.to) ? 0.45 : 0.12}
+                  strokeOpacity={key === selected ? 0.7 : lit(l.from, l.to) ? 0.45 : 0.12}
+                  onClick={() => onSelect(key === selected ? null : key)}
                   onPointerMove={show(
                     `${l.from}>${l.to}`,
                     `${labelOf(l.from)} → ${labelOf(l.to)}: ${formatCents(l.cents)}`,

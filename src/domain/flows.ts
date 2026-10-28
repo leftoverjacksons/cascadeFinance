@@ -33,6 +33,11 @@ export interface SankeyNode {
 export interface SankeyGraph {
   nodes: SankeyNode[];
   links: SankeyLink[];
+  /**
+   * The money_flows rows behind each drawn link ("from>to"), for listing its
+   * transactions. Both directions of a netted transfer belong to the link.
+   */
+  rowsByLink?: Map<string, FlowRow[]>;
 }
 
 export interface FlowNames {
@@ -116,6 +121,12 @@ export function buildSankey(rows: FlowRow[], names: FlowNames): SankeyGraph {
   const acct = (id: string) => node(`acct:${id}`, names.account(id), 'account');
   const linkTotals = new Map<string, number>();
   const transfers: SankeyLink[] = [];
+  // Each row's link before tidying (transfers: the account pair, either direction).
+  const rowLinks: [FlowRow, string, string][] = [];
+  const add = (r: FlowRow, from: string, to: string) => {
+    addTo(linkTotals, `${from}>${to}`, r.cents);
+    rowLinks.push([r, from, to]);
+  };
 
   for (const r of rows) {
     if (r.cents <= 0) continue;
@@ -125,28 +136,25 @@ export function buildSankey(rows: FlowRow[], names: FlowNames): SankeyGraph {
           r.source === UNCATEGORIZED
             ? node('in:uncategorized', 'Other money in', 'income')
             : node(`in:${r.source}`, names.category(r.source), 'income');
-        addTo(linkTotals, `${from}>${acct(r.target)}`, r.cents);
+        add(r, from, acct(r.target));
         break;
       }
       case 'spend': {
         const group = r.target === UNCATEGORIZED || names.series.includes(r.target) ? r.target : OTHER;
         const label =
           group === UNCATEGORIZED ? 'Uncategorized' : group === OTHER ? 'Other spending' : names.category(group);
-        addTo(linkTotals, `${acct(r.source)}>${node(`spend:${group}`, label, 'spend', group)}`, r.cents);
+        add(r, acct(r.source), node(`spend:${group}`, label, 'spend', group));
         break;
       }
       case 'transfer':
         transfers.push({ from: acct(r.source), to: acct(r.target), cents: r.cents });
+        rowLinks.push([r, acct(r.source), acct(r.target)]);
         break;
       case 'out_other':
-        addTo(linkTotals, `${acct(r.source)}>${node(`tout:${r.target}`, names.category(r.target), 'transfer')}`, r.cents);
+        add(r, acct(r.source), node(`tout:${r.target}`, names.category(r.target), 'transfer'));
         break;
       case 'in_other':
-        addTo(
-          linkTotals,
-          `${node(`tin:${r.source}`, `${names.category(r.source)} (in)`, 'transfer')}>${acct(r.target)}`,
-          r.cents,
-        );
+        add(r, node(`tin:${r.source}`, `${names.category(r.source)} (in)`, 'transfer'), acct(r.target));
         break;
     }
   }
@@ -156,10 +164,20 @@ export function buildSankey(rows: FlowRow[], names: FlowNames): SankeyGraph {
     return { from, to, cents };
   });
   links.push(...breakCycles(netTransfers(transfers)));
-  links = tidy(links, nodes);
+  const tidied = tidy(links, nodes);
+  links = tidied.links;
+
+  const drawn = new Set(links.map((l) => `${l.from}>${l.to}`));
+  const rowsByLink = new Map<string, FlowRow[]>();
+  for (const [r, from, to] of rowLinks) {
+    const candidates =
+      r.kind === 'transfer' ? [`${from}>${to}`, `${to}>${from}`] : [`${tidied.remap(from)}>${tidied.remap(to)}`];
+    const key = candidates.find((k) => drawn.has(k));
+    if (key) rowsByLink.set(key, [...(rowsByLink.get(key) ?? []), r]);
+  }
 
   const used = new Set(links.flatMap((l) => [l.from, l.to]));
-  return { nodes: [...nodes.values()].filter((n) => used.has(n.key)), links };
+  return { nodes: [...nodes.values()].filter((n) => used.has(n.key)), links, rowsByLink };
 }
 
 /** Income sources below this share of all money in are folded into "Other money in". */
@@ -171,7 +189,10 @@ const UNLINKED_IN = 'tin:all';
  * Fewer, larger nodes: small income sources fold into "Other money in", and
  * unlinked transfers in (one node per transfer category) become one node.
  */
-function tidy(links: SankeyLink[], nodes: Map<string, SankeyNode>): SankeyLink[] {
+function tidy(
+  links: SankeyLink[],
+  nodes: Map<string, SankeyNode>,
+): { links: SankeyLink[]; remap: (key: string) => string } {
   const incomeTotal = new Map<string, number>();
   for (const l of links) if (l.from.startsWith('in:')) incomeTotal.set(l.from, (incomeTotal.get(l.from) ?? 0) + l.cents);
   const allIncome = [...incomeTotal.values()].reduce((a, b) => a + b, 0);
@@ -196,7 +217,7 @@ function tidy(links: SankeyLink[], nodes: Map<string, SankeyNode>): SankeyLink[]
     if (existing) existing.cents += l.cents;
     else merged.set(k, { from, to: l.to, cents: l.cents });
   }
-  return [...merged.values()];
+  return { links: [...merged.values()], remap };
 }
 
 export interface SankeyLayout {

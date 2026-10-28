@@ -13,8 +13,11 @@ import type { PanelProps } from './panels';
 
 const LIMIT = 200;
 
-/** Compact transaction list for the desktop dashboard. */
-export default function TransactionsPanel({ onDataChanged }: PanelProps) {
+/**
+ * Compact transaction list for the desktop dashboard. While a flow is selected
+ * on the money-flow diagram, it lists that flow's transactions instead.
+ */
+export default function TransactionsPanel({ onDataChanged, flow, onFlow }: PanelProps) {
   const { tree, byId } = useCategories();
   const { accounts } = useAccounts();
   const { byTxn, refresh: refreshLinks } = useTransferLinks();
@@ -26,6 +29,19 @@ export default function TransactionsPanel({ onDataChanged }: PanelProps) {
 
   const load = useCallback(async () => {
     const id = ++requestId.current;
+    if (flow) {
+      const { data } = await supabase
+        .rpc('money_flow_transactions', {
+          p_from: flow.from,
+          p_to: flow.to,
+          p_kinds: flow.rows.map((r) => r.kind),
+          p_sources: flow.rows.map((r) => r.source),
+          p_targets: flow.rows.map((r) => r.target),
+        })
+        .limit(LIMIT);
+      if (id === requestId.current) setRows(data ?? []);
+      return;
+    }
     let q = supabase
       .from('transactions')
       .select('*')
@@ -38,7 +54,7 @@ export default function TransactionsPanel({ onDataChanged }: PanelProps) {
     if (term) q = q.or(`display_description.ilike.%${term}%,raw_description.ilike.%${term}%`);
     const { data } = await q;
     if (id === requestId.current) setRows(data ?? []);
-  }, [onlyUncategorized, search]);
+  }, [onlyUncategorized, search, flow]);
 
   useEffect(() => {
     const t = setTimeout(() => void load(), 250);
@@ -49,20 +65,32 @@ export default function TransactionsPanel({ onDataChanged }: PanelProps) {
 
   return (
     <div className="panel-transactions" data-testid="transactions-panel">
-      <div className="panel-toolbar">
-        <IonSegment
-          value={onlyUncategorized ? 'none' : 'all'}
-          onIonChange={(e) => setOnlyUncategorized(e.detail.value === 'none')}
-        >
-          <IonSegmentButton value="all">
-            <IonLabel>All</IonLabel>
-          </IonSegmentButton>
-          <IonSegmentButton value="none">
-            <IonLabel>Uncategorized</IonLabel>
-          </IonSegmentButton>
-        </IonSegment>
-        <IonSearchbar value={search} onIonInput={(e) => setSearch(e.detail.value ?? '')} placeholder="Search" />
-      </div>
+      {flow ? (
+        <div className="flows-selection" data-testid="transactions-flow-filter">
+          <span>
+            {rows.length === LIMIT ? `Latest ${LIMIT}` : rows.length} transaction{rows.length === 1 ? '' : 's'} in{' '}
+            <strong>{flow.label}</strong>
+          </span>
+          <button className="link-like" onClick={() => onFlow(null)}>
+            Show all
+          </button>
+        </div>
+      ) : (
+        <div className="panel-toolbar">
+          <IonSegment
+            value={onlyUncategorized ? 'none' : 'all'}
+            onIonChange={(e) => setOnlyUncategorized(e.detail.value === 'none')}
+          >
+            <IonSegmentButton value="all">
+              <IonLabel>All</IonLabel>
+            </IonSegmentButton>
+            <IonSegmentButton value="none">
+              <IonLabel>Uncategorized</IonLabel>
+            </IonSegmentButton>
+          </IonSegment>
+          <IonSearchbar value={search} onIonInput={(e) => setSearch(e.detail.value ?? '')} placeholder="Search" />
+        </div>
+      )}
       <div className="panel-scroll">
         <table className="data-table txn-table">
           <thead>
@@ -85,7 +113,9 @@ export default function TransactionsPanel({ onDataChanged }: PanelProps) {
           </tbody>
         </table>
         {rows.length === 0 && <p className="caption">Nothing to show.</p>}
-        {rows.length === LIMIT && <p className="caption">Showing the latest {LIMIT}; use Transactions for everything.</p>}
+        {rows.length === LIMIT && !flow && (
+          <p className="caption">Showing the latest {LIMIT}; use Transactions for everything.</p>
+        )}
       </div>
       <TransactionModal
         transaction={selected}

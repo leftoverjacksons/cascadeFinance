@@ -90,8 +90,26 @@ test('transfers between accounts are linked, reviewable, and shown as money flow
     await page.mouse.up();
   }
   await expect.poll(async () => (await node.locator('rect').nth(1).boundingBox())!.x).not.toBe(before.x);
+  const moved = (await node.locator('rect').nth(1).boundingBox())!.x;
+  // Positions are saved for this person and survive a reload.
+  await page.waitForTimeout(1500);
+  await page.reload();
+  await node.scrollIntoViewIfNeeded();
+  await expect.poll(async () => (await node.locator('rect').nth(1).boundingBox())!.x).toBeCloseTo(moved, 0);
   await flows.getByRole('button', { name: 'Reset layout' }).click();
   await expect.poll(async () => (await node.locator('rect').nth(1).boundingBox())!.x).toBe(before.x);
+
+  // Clicking a flow selects it and lists its transactions (in the Transactions
+  // panel on desktop, under the diagram on phones).
+  // (Dispatched on the element: flows overlap, so a click at its centre may land on another.)
+  await flows.locator('path[data-link^="in:"]').first().dispatchEvent('click');
+  await expect(flows.getByTestId('flow-selection')).toContainText('Paycheck');
+  const list = test.info().project.name === 'phone' ? flows : activePage(page).locator('[data-panel=transactions]');
+  await expect(list.getByTestId('transactions-flow-filter')).toContainText('1 transaction in');
+  await expect(list.getByTestId('transactions-panel')).toContainText('Example Employer Payroll');
+  await expect(list.getByTestId('transactions-panel')).not.toContainText('Kroger');
+  await list.getByRole('button', { name: 'Show all' }).click();
+  await expect(flows.getByTestId('flow-selection')).toHaveCount(0);
   await flows.getByRole('button', { name: 'Show as table' }).click();
   const table = flows.getByTestId('flows-table');
   await expect(table.locator('tr', { hasText: 'Joint' }).filter({ hasText: 'Main Checking' })).toContainText('$1,000');

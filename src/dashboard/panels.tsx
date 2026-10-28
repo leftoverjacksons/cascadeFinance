@@ -2,6 +2,7 @@ import type { ChartConfiguration, TooltipItem } from 'chart.js';
 import { Fragment, useCallback, useState, type ReactNode } from 'react';
 import ChartCanvas, { axes, type ChartColors } from '../charts/ChartCanvas';
 import { formatDay } from '../domain/dates';
+import type { FlowRow } from '../domain/flows';
 import { formatCents, formatCentsCompact, formatCentsWhole } from '../domain/money';
 import { OTHER, UNCATEGORIZED, type MonthSummary } from '../domain/summary';
 import { averageOf, groupValue, monthLabel, TOP_GROUPS, type DashboardModel } from './model';
@@ -15,6 +16,21 @@ export interface PanelProps {
   fill: boolean;
   /** Called after a panel changes data (e.g. recategorising), so others refresh. */
   onDataChanged: () => void;
+  /** Flow picked on the money-flow diagram; the transactions panel lists its transactions. */
+  flow: FlowSelection | null;
+  onFlow: (flow: FlowSelection | null) => void;
+  /** Whether the transactions panel is on screen (if not, the money-flow panel lists them itself). */
+  transactionsShown: boolean;
+}
+
+/** A flow (link) of the money-flow diagram and the money_flows rows behind it. */
+export interface FlowSelection {
+  key: string;
+  label: string;
+  cents: number;
+  from: string;
+  to: string;
+  rows: FlowRow[];
 }
 
 export interface PanelDef {

@@ -23,7 +23,7 @@ import {
   type LayoutItem,
 } from './layout';
 import type { DashboardModel } from './model';
-import { PANEL_BY_ID, PANELS } from './panels';
+import { PANEL_BY_ID, PANELS, type FlowSelection } from './panels';
 
 const Grid = WidthProvider(GridLayout);
 const KNOWN = PANELS.map((p) => p.id);
@@ -46,7 +46,14 @@ function useRowHeight(container: React.RefObject<HTMLDivElement>) {
   return rowHeight;
 }
 
-export default function Workspace({ model, onDataChanged }: { model: DashboardModel; onDataChanged: () => void }) {
+interface Props {
+  model: DashboardModel;
+  onDataChanged: () => void;
+  flow: FlowSelection | null;
+  onFlow: (flow: FlowSelection | null) => void;
+}
+
+export default function Workspace({ model, onDataChanged, flow, onFlow }: Props) {
   const { session } = useAuth();
   const userId = session!.user.id;
   const [items, setItems] = useState<LayoutItem[] | null>(null);
@@ -154,7 +161,14 @@ export default function Workspace({ model, onDataChanged }: { model: DashboardMo
                 </button>
               </header>
               <div className="panel-body">
-                <Body model={model} fill onDataChanged={onDataChanged} />
+                <Body
+                  model={model}
+                  fill
+                  onDataChanged={onDataChanged}
+                  flow={flow}
+                  onFlow={onFlow}
+                  transactionsShown={items.some((x) => x.i === 'transactions')}
+                />
               </div>
             </section>
           );

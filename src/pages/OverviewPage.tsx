@@ -15,7 +15,7 @@ import {
 } from '@ionic/react';
 import { lazy, Suspense, useCallback, useState } from 'react';
 import { PERIODS, useDashboardModel } from '../dashboard/model';
-import { PANELS } from '../dashboard/panels';
+import { PANELS, type FlowSelection } from '../dashboard/panels';
 import { useAccounts } from '../household/useAccounts';
 import { useCategories } from '../household/useCategories';
 import { useOverview } from '../household/useOverview';
@@ -31,6 +31,7 @@ export default function OverviewPage() {
   const [period, setPeriod] = useState<number>(12);
   const isDesktop = useIsDesktop();
   const model = useDashboardModel(data, byId, accounts, period);
+  const [flow, setFlow] = useState<FlowSelection | null>(null);
 
   const refreshAll = useCallback(async () => {
     await Promise.all([refresh(), refreshCategories(), refreshAccounts()]);
@@ -90,7 +91,7 @@ export default function OverviewPage() {
               </div>
             }
           >
-            <Workspace model={model} onDataChanged={() => void refresh()} />
+            <Workspace model={model} onDataChanged={() => void refresh()} flow={flow} onFlow={setFlow} />
           </Suspense>
         )}
         {model && !noData && !isDesktop && (
@@ -99,7 +100,14 @@ export default function OverviewPage() {
               <section key={id} className={`card panel-${id}`} data-panel={id}>
                 {id !== 'kpis' && <h2>{title}</h2>}
                 {caption && <p className="caption">{caption(model)}</p>}
-                <Body model={model} fill={false} onDataChanged={() => void refresh()} />
+                <Body
+                  model={model}
+                  fill={false}
+                  onDataChanged={() => void refresh()}
+                  flow={flow}
+                  onFlow={setFlow}
+                  transactionsShown={false}
+                />
               </section>
             ))}
           </div>

@@ -134,3 +134,28 @@ describe('layoutSankey', () => {
   });
 });
 
+describe('rowsByLink', () => {
+  const rows: FlowRow[] = [
+    { kind: 'income', source: 'pay', target: 'chk', cents: 1000000 },
+    { kind: 'income', source: 'int', target: 'chk', cents: 100 },
+    { kind: 'in_other', source: 'loan', target: 'chk', cents: 5000 },
+    { kind: 'in_other', source: 'cc', target: 'chk', cents: 7000 },
+    { kind: 'transfer', source: 'chk', target: 'jnt', cents: 30000 },
+    { kind: 'transfer', source: 'jnt', target: 'chk', cents: 10000 },
+    { kind: 'spend', source: 'chk', target: 'food', cents: 900000 },
+  ];
+  const g = buildSankey(rows, names);
+
+  it('lists the rows behind each drawn link, including folded and merged ones', () => {
+    for (const l of g.links.filter((l) => !l.from.startsWith('acct:') || !l.to.startsWith('acct:'))) {
+      const total = (g.rowsByLink!.get(`${l.from}>${l.to}`) ?? []).reduce((t, r) => t + r.cents, 0);
+      expect(total).toBe(l.cents);
+    }
+    expect(g.rowsByLink!.get('in:uncategorized>acct:chk')).toEqual([rows[1]]);
+    expect(g.rowsByLink!.get('tin:all>acct:chk')).toHaveLength(2);
+  });
+
+  it('gives both directions of a netted transfer to its link', () => {
+    expect(g.rowsByLink!.get('acct:chk>acct:jnt')).toEqual([rows[4], rows[5]]);
+  });
+});
