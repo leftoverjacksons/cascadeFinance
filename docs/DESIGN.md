@@ -213,11 +213,15 @@ Model:
 - **`is_shared`** marks an expense from a personal account as mutual. Rules can set it (e.g. all `Groceries` are shared); it can be toggled per transaction.
 - **Split ratio**: household setting, default **50/50**, configurable in settings; overridable per transaction.
 - For each shared expense of amount *A* paid by member *p*: *p* is credited *A × (1 − share_p)* owed by the other member.
-- **Joint account as pass-through**: in practice the joint checking is used mainly as an intermediary for moving money between accounts, not for spending. Consequences:
-  - Transfer matching must handle **chains** (personal A → joint → personal B, possibly a few days apart), not only direct pairs. A chain is collapsed into one logical transfer A → B.
-  - The rare expense paid directly from joint is shared by definition and creates no debt.
-  - Contributions into joint are **not** scored as "paying more" by themselves; only the money's final destination matters.
-- **Settlements**: a logical transfer from one member's personal account to the other's (direct or via joint) is proposed as a settlement; it **defaults to accepted** (household confirmed such transfers are usually paybacks); the user can reclassify it (e.g. a gift). Explicit manual settlement entries are also allowed.
+- **Joint accounts as a shared pot (contribution model, revised 2026-10-28).** The household's actual flow: Travis sends mortgage and bill money into joint checking each month; Caitlin moves it on to savings, from which the mortgage is paid; Caitlin puts money into joint mainly to lend to Travis. So:
+  - Money a member puts into a joint account counts as paying toward shared costs (the other member owes their share of it).
+  - Money a member takes out of a joint account to their own account counts against them.
+  - Spending from joint accounts creates no debt: the pot paid it.
+  - Moves between joint accounts are ignored.
+  - Consequences: A → joint → B nets to a full payback from A to B (no special two-hop rule needed). Money left in joint savings counts as contributed (savings are jointly owned).
+  - Correctness depends on account owners being set (personal vs joint) and on mortgage payments being categorised as a shared expense (see the loan question in §11).
+- **Paybacks**: a transfer between two members' personal accounts counts as a payback (default on; household confirmed such transfers are usually paybacks). Any contribution, withdrawal or payback can be switched off. Payments outside the accounts are recorded by hand.
+
 - Output: running balance "Member 1 owes Member 2 $X", per-month breakdown, list of contributing transactions.
 
 
@@ -305,8 +309,8 @@ Model:
 - Migration `20261101000001_shared.sql`. Implements §9a with these concrete choices:
   - *What is shared:* `categories.is_shared` ("shared by default"; seeded for Groceries, Housing, Utilities, Pets) with a per-transaction override `transactions.shared_override` (null = category default). Only spending from a personal account (`accounts.owner_user_id` set) enters the ledger; joint-account spending is shared by definition and creates no debt. Linked transfers are never expenses.
   - *Split:* per-member `split_weight` (unchanged; 50/50 default).
-  - *Paybacks:* `member_transfers()` derives money moving between two members' personal accounts: direct links, and two-hop routes personal → joint → other personal (same amount, second hop within 7 days of the first arriving; most-constrained/closest first, each hop used once). Each counts as a payback unless switched off (`settlement_overrides`, keyed by the sender's transaction so it survives re-matching). Payments outside the accounts go in `manual_settlements`. Money put into the joint account and not passed on is not a payback (pass-through model from §9a).
-  - *Ledger:* `shared_ledger()` returns entries "debtor owes creditor N cents" (expense shares, paybacks, recorded payments) from `households.shared_since` (null = all history). The client nets them per pair.
+  - *Movements:* `member_transfers()` classifies each linked transfer with a personal account on at least one side as payback (personal → other member's personal), contribution (personal → joint) or withdrawal (joint → personal). Each counts unless switched off (`settlement_overrides`, keyed by the sender's transaction so it survives re-matching). Payments outside the accounts go in `manual_settlements`. (First drafted with a two-hop "via joint" rule and contributions ignored; replaced by the contribution model before deploy, after the household described its mortgage flow.)
+  - *Ledger:* `shared_ledger()` returns entries "debtor owes creditor N cents" (expense shares, contribution and withdrawal shares, paybacks, recorded payments) from `households.shared_since` (null = all history). The client nets them per pair. `08_household_scenarios` tests the household's real flow with savings owned jointly and by Caitlin.
 - **Matcher change: order-independent.** Automatic and suggested links are recomputed from scratch on every run (confirmed links and rejections kept), most constrained first (a transaction with one possible partner is paired before ones with alternatives), then closest dates. Manual link / unlink / "not a transfer" re-run it immediately. Previously the result depended on import order (a 4-day direct pairing could pre-empt two 1-day hops via the joint account imported later). "Zelle" now counts as transfer wording.
 - UI: Shared page (balance with "Settle up", start date, by-month table, money between you with a Payback toggle, recorded payments, shared expenses with "Not shared"); "Shared between you" dashboard panel; "shared by default" on categories; "Shared with partner" on a transaction (personal-account spending only).
 - **Accessibility bug fixed:** closing a dialog that contained a dropdown (e.g. account owner, import account) left `aria-hidden` on the router outlet, hiding the whole app from screen readers. A global handler clears it once no overlay is open; regression-tested. (This was the cause of an earlier "flaky" test previously attributed to Playwright.)
@@ -343,7 +347,7 @@ Model:
 | 2026-10-26 | Auth: email + password (Supabase Auth) | Household preference | Accepted |
 | 2026-10-26 | Import as much history as institutions allow | Household preference; dedup makes chunked/overlapping imports safe | Accepted |
 | 2026-10-26 | Shared-expense split default 50/50, configurable | Household preference | Accepted |
-| 2026-10-26 | Joint checking modelled as pass-through; transfer chains collapsed; contributions not scored | Joint account barely used for spending | Accepted |
+| 2026-10-26 | Joint checking modelled as pass-through; transfer chains collapsed; contributions not scored | Joint account barely used for spending | **Superseded 2026-10-28** (contribution model) |
 | 2026-10-26 | Credit card importers deferred until samples available | Samples unavailable for now | Accepted |
 | 2026-10-26 | Member-to-member transfers default to settlement | Household: usually paybacks | Accepted |
 | 2026-10-26 | Schema deployed automatically from `main` via GitHub Actions (`supabase db push`) | Household preference; keeps DB and code in lockstep | Accepted |
@@ -365,3 +369,4 @@ Model:
 | 2026-10-31 | Seeded rule: description contains "OD FEE" → Financial › Fees & Charges (priority 400) | USAA labels overdraft fees on loan ACH items as "Auto Payment"; they are fees, not loan payments | Accepted |
 | 2026-11-01 | Shared-by-default per category + per-transaction override | Few decisions up front; exceptions where they occur | Accepted |
 | 2026-11-01 | Transfer matching recomputed on every run (order-independent) | Same result regardless of import order | Accepted |
+| 2026-10-28 | Joint accounts are a shared pot: contributions and withdrawals count toward the member balance | Joint checking/savings is how mortgage and bill money flows; contributions are the main shared payments | Accepted |

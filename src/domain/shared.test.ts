@@ -58,3 +58,22 @@ describe('monthlyBreakdown', () => {
     expect(monthlyBreakdown(three, A, B)[0].paidBy.get(A)).toBe(9000);
   });
 });
+
+describe('joint contributions', () => {
+  const joint = [
+    // A put 2,000 into joint: B owes half.
+    e({ entry_kind: 'contribution', ref_id: 'c1', total_cents: 200000, cents: 100000, entry_date: '2026-11-01' }),
+    // B took 300 out of joint: B owes A half of it.
+    e({ entry_kind: 'withdrawal', ref_id: 'w1', total_cents: 30000, cents: 15000, entry_date: '2026-11-02' }),
+  ];
+  it('count toward the balance', () => {
+    expect(balanceBetween(joint, A, B)).toBe(115000);
+  });
+  it('are shown as net money into the joint accounts', () => {
+    const [nov] = monthlyBreakdown(joint, A, B);
+    expect(nov.intoJoint.get(A)).toBe(200000);
+    expect(nov.intoJoint.get(B)).toBe(-30000);
+    expect(nov.paidBack.size).toBe(0);
+  });
+});
+

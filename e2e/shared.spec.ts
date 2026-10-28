@@ -17,6 +17,15 @@ const alexChecking = Buffer.from(
     header,
     '2026-10-01,"Kroger","KROGER #1",Groceries,-100.00,Posted',
     '2026-10-05,"USAA Transfer","USAA FUNDS TRANSFER DB",Transfer,-60.00,Posted',
+    '2026-10-08,"USAA Transfer","USAA FUNDS TRANSFER DB J",Transfer,-100.00,Posted',
+  ].join('\n') + '\n',
+);
+// Alex's $100 goes into the joint pot, which pays a $100 bill.
+const jointChecking = Buffer.from(
+  [
+    header,
+    '2026-10-09,"USAA Transfer","USAA FUNDS TRANSFER CR J",Transfer,100.00,Posted',
+    '2026-10-12,"Georgia Power","GEORGIA POWER",Utilities,-100.00,Posted',
   ].join('\n') + '\n',
 );
 const blairChecking = Buffer.from(
@@ -43,30 +52,34 @@ test('shared expenses, paybacks and settling up', async ({ page }) => {
 
   await addAccount(page, 'Alex Checking', 'USAA', undefined, 'Alex');
   await addAccount(page, 'Blair Checking', 'USAA', undefined, 'Blair');
+  await addAccount(page, 'Joint Checking');
   // Regression: closing a dialog that contained a dropdown left the whole app
   // aria-hidden (invisible to screen readers).
   await expect(page.locator('ion-router-outlet[aria-hidden="true"]')).toHaveCount(0);
   await importCsv(page, 'Alex Checking', { name: 'a.csv', buffer: alexChecking });
   await importCsv(page, 'Blair Checking', { name: 'b.csv', buffer: blairChecking });
+  await importCsv(page, 'Joint Checking', { name: 'j.csv', buffer: jointChecking });
 
   // Alex's $100 groceries: Blair owes $50. Blair's $80: Alex owes $40.
-  // Alex sent Blair $60 (a payback): Blair owes $60 more. Net: Blair owes Alex $70.
+  // Alex sent Blair $60 (a payback): Blair owes $60 more.
+  // Alex put $100 into the joint pot (which paid the power bill): Blair owes $50 more. Net: $120.
   await openTab(page, 'settings');
   await activePage(page).getByText('Shared expenses and paybacks').click();
   const balance = page.getByTestId('shared-balance');
   await expect(balance).toContainText('Blair owes Alex');
-  await expect(balance).toContainText('$70.00');
+  await expect(balance).toContainText('$120.00');
+  await expect(page.getByTestId('member-transfers')).toContainText('Alex → Joint Checking · $100.00');
 
   // Not a payback after all.
   const transfer = page.getByTestId('member-transfers').locator('ion-item', { hasText: 'Alex → Blair' });
   await expect(transfer).toContainText('$60.00');
   await transfer.locator('ion-toggle').click();
-  await expect(balance).toContainText('$10.00');
+  await expect(balance).toContainText('$60.00');
 
   // Settle up with a recorded payment.
   await balance.getByRole('button', { name: 'Settle up' }).click();
   const payment = page.locator('ion-modal').filter({ hasText: 'Record a payment' });
-  await expect(payment.locator('ion-input').first().locator('input')).toHaveValue('10.00');
+  await expect(payment.locator('ion-input').first().locator('input')).toHaveValue('60.00');
   await payment.getByRole('button', { name: 'Save' }).click();
   await expect(balance).toContainText("You're all square.");
 

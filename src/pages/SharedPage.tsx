@@ -34,6 +34,12 @@ import { supabase } from '../lib/supabase';
 
 const monthFmt = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
 
+const KIND_LABELS: Record<string, string> = {
+  payback: 'payback',
+  contribution: 'into the joint pot',
+  withdrawal: 'out of the joint pot',
+};
+
 export default function SharedPage() {
   const { household, members, refresh: refreshHousehold } = useRequiredHousehold();
   const { accounts } = useAccounts();
@@ -151,10 +157,12 @@ export default function SharedPage() {
               <IonItem lines="none">
                 <IonText color="medium">
                   <p className="hint">
+                    Joint accounts are a shared pot. Money either of you puts in counts as paying toward shared costs;
+                    money taken out to your own account counts against you; spending from the pot creates no debt.
                     Shared expenses paid from one person's own account are split by your household split (Settings).
-                    Spending from the joint account is already shared. Money sent from one of your accounts to the
-                    other's, directly or through the joint account, counts as a payback unless you switch it off below.
-                    Mark categories as shared in Settings → Categories, or individual transactions in their details.
+                    Money sent straight from one of your accounts to the other's is a payback. Switch any movement
+                    off below if it shouldn't count. Mark categories as shared in Settings → Categories, or single
+                    transactions in their details.
                   </p>
                 </IonText>
               </IonItem>
@@ -182,6 +190,7 @@ export default function SharedPage() {
                     <th>Month</th>
                     <th>{a.display_name} paid</th>
                     <th>{b.display_name} paid</th>
+                    <th>Into joint</th>
                     <th>Paid back</th>
                     <th>Change</th>
                   </tr>
@@ -191,11 +200,16 @@ export default function SharedPage() {
                     const back = [...m.paidBack.entries()]
                       .map(([who, cents]) => `${name(who)} ${formatCentsWhole(cents)}`)
                       .join(', ');
+                    const joint = [...m.intoJoint.entries()]
+                      .filter(([, cents]) => cents !== 0)
+                      .map(([who, cents]) => `${name(who)} ${formatCentsWhole(cents)}`)
+                      .join(', ');
                     return (
                       <tr key={m.month}>
                         <td>{monthFmt.format(new Date(`${m.month}T00:00:00Z`))}</td>
                         <td>{formatCentsWhole(m.paidBy.get(a.user_id) ?? 0)}</td>
                         <td>{formatCentsWhole(m.paidBy.get(b.user_id) ?? 0)}</td>
+                        <td>{joint || '—'}</td>
                         <td>{back || '—'}</td>
                         <td>
                           {m.change === 0
@@ -209,19 +223,20 @@ export default function SharedPage() {
               </table>
               {months.length === 0 && <p className="caption">Nothing shared yet.</p>}
               <p className="caption">
-                "Change" is how much more the named person owes by the end of the month; shared spending from the joint
-                account isn't listed because it creates no debt.
+                "Paid" is shared spending from each person's own accounts; "Into joint" is net money put into the
+                joint pot. "Change" is how much more the named person owes by the end of the month.
               </p>
             </section>
           </div>
 
           <div>
             <IonList inset data-testid="member-transfers">
-              <IonListHeader>Money between you ({transfers.length})</IonListHeader>
+              <IonListHeader>Money between you and the joint accounts ({transfers.length})</IonListHeader>
               {transfers.length === 0 && (
                 <IonItem lines="none">
                   <IonNote className="ion-text-wrap">
-                    None found. Transfers appear here once both personal accounts are imported and linked (Transfers).
+                    None found. Transfers appear here once the accounts on both sides are imported and linked
+                    (Transfers), and each account's owner is set (Accounts).
                   </IonNote>
                 </IonItem>
               )}
@@ -229,16 +244,17 @@ export default function SharedPage() {
                 <IonItem key={t.out_txn_id} data-transfer={t.out_txn_id}>
                   <IonLabel className="ion-text-wrap">
                     <h3>
-                      {name(t.from_user)} → {name(t.to_user)} · {formatCents(t.amount_cents)}
+                      {t.from_user ? name(t.from_user) : accountName(t.from_account)} →{' '}
+                      {t.to_user ? name(t.to_user) : accountName(t.to_account)} · {formatCents(t.amount_cents)}
                     </h3>
                     <p>
-                      {formatDay(t.received_on)}
-                      {t.via_account && ` · via ${accountName(t.via_account)}`}
+                      {formatDay(t.received_on)} · {KIND_LABELS[t.kind] ?? t.kind}
+                      {t.from_user && t.to_user && ` · ${accountName(t.from_account)} → ${accountName(t.to_account)}`}
                     </p>
                   </IonLabel>
                   <IonToggle
                     slot="end"
-                    checked={t.is_settlement}
+                    checked={t.counted}
                     onIonChange={(e) =>
                       void run(
                         supabase.from('settlement_overrides').upsert({
@@ -249,7 +265,7 @@ export default function SharedPage() {
                       )
                     }
                   >
-                    Payback
+                    Counts
                   </IonToggle>
                 </IonItem>
               ))}

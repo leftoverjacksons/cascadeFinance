@@ -5,7 +5,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(19);
+select plan(21);
 
 insert into auth.users (id, email, aud, role) values
   ('00000000-0000-0000-0000-00000000000a', 'a@test.local', 'authenticated', 'authenticated'),
@@ -67,16 +67,17 @@ select ok((select is_shared from public.categories where name = 'Groceries'), 'g
 select ok(not (select is_shared from public.categories where name = 'Personal Care'), 'personal care is not');
 
 -- ── Member transfers ───────────────────────────────────────────────────────
-select is((select count(*)::int from public.member_transfers() where via_account is null), 2,
-  'direct transfers between the two personal accounts (bank transfer and Zelle)');
-select is((select count(*)::int from public.member_transfers() where via_account is not null), 1,
-  'one two-hop transfer through the joint account');
+select is((select count(*)::int from public.member_transfers() where kind = 'payback'), 2,
+  'paybacks: transfers between the two personal accounts (bank transfer and Zelle)');
+select is((select count(*)::int from public.member_transfers() where kind = 'contribution'), 2,
+  'contributions: A put money into the joint account twice');
 select is(
-  (select amount_cents from public.member_transfers() where via_account is not null), 30000::bigint,
-  'two-hop transfer amount');
+  (select to_user from public.member_transfers() where kind = 'withdrawal'),
+  '00000000-0000-0000-0000-00000000000b'::uuid,
+  'withdrawal: B took money out of the joint account');
 select is(
-  (select count(*)::int from public.member_transfers() where amount_cents = 20000), 0,
-  'money put into the joint account and not passed on is not a member transfer');
+  (select sum(amount_cents)::bigint from public.member_transfers() where kind = 'contribution'), 50000::bigint,
+  'contribution amounts');
 
 -- Same result whatever order the accounts were imported in (B before joint here).
 select is(public.match_transfers(), 0, 're-matching changes nothing once all accounts are in');
@@ -99,17 +100,27 @@ select is((select cents from public.shared_ledger() where ref_id = pg_temp.txn('
 select is((select count(*)::int from public.shared_ledger() where ref_id = pg_temp.txn('ELECTRIC CO')), 0,
   'spending from the joint account creates no debt');
 
--- 5000 + 1000 - 500 (A's shared spending) - 4000 (B's Publix) + 60000 + 30000 + 5000 (paybacks A -> B)
-select is(pg_temp.b_owes_a(), 96500::bigint, 'running balance: B owes A');
+select is(
+  (select sum(cents)::bigint from public.shared_ledger()
+   where entry_kind in ('contribution', 'withdrawal') and ref_id in (
+     pg_temp.txn('USAA FUNDS TRANSFER DB 2'), pg_temp.txn('USAA FUNDS TRANSFER DB J2'))),
+  30000::bigint, 'A -> joint -> B nets to a full payback from A to B');
+select is(
+  (select cents from public.shared_ledger() where ref_id = pg_temp.txn('USAA FUNDS TRANSFER DB 3')), 10000::bigint,
+  'money A put into the joint pot (and the pot spent) counts as A paying toward shared costs: B owes half');
+
+-- Shared spending: 5000 + 1000 - 500 (A's) - 4000 (B's Publix)
+-- Paybacks A -> B: 60000 + 5000; via joint: 30000; A's contribution: 20000 / 2
+select is(pg_temp.b_owes_a(), 106500::bigint, 'running balance: B owes A');
 
 -- ── Not a payback; manual settlement; start date ───────────────────────────
 insert into public.settlement_overrides (out_txn_id, household_id, is_settlement)
 values (pg_temp.txn('USAA FUNDS TRANSFER DB 1'), current_setting('test.h1')::uuid, false);
-select is(pg_temp.b_owes_a(), 36500::bigint, 'a transfer marked "not a payback" no longer counts');
+select is(pg_temp.b_owes_a(), 46500::bigint, 'a transfer marked "not a payback" no longer counts');
 
 insert into public.manual_settlements (household_id, from_user_id, to_user_id, amount_cents, settled_on, note)
 values (current_setting('test.h1')::uuid, '00000000-0000-0000-0000-00000000000b', '00000000-0000-0000-0000-00000000000a',
-        36500, '2026-10-31', 'Cash');
+        46500, '2026-10-31', 'Cash');
 select is(pg_temp.b_owes_a(), 0::bigint, 'B paying A by hand settles the balance');
 
 update public.households set shared_since = '2026-10-08';

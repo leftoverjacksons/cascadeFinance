@@ -3,7 +3,12 @@
 // e.g. a refund on a shared expense).
 
 export interface LedgerEntry {
-  entry_kind: 'expense' | 'payback' | 'manual';
+  /**
+   * expense: shared spending from a personal account; contribution / withdrawal:
+   * money into / out of a joint account; payback: between personal accounts;
+   * manual: recorded by hand.
+   */
+  entry_kind: 'expense' | 'contribution' | 'withdrawal' | 'payback' | 'manual';
   entry_date: string; // YYYY-MM-DD
   ref_id: string;
   description: string;
@@ -42,6 +47,8 @@ export interface MonthLine {
   paidBy: Map<string, number>;
   /** Paybacks (bank transfers and recorded payments) from each member. */
   paidBack: Map<string, number>;
+  /** Net money each member put into joint accounts (taken out counts negative). */
+  intoJoint: Map<string, number>;
   /** Change in what `b` owes `a` during the month. */
   change: number;
 }
@@ -52,23 +59,29 @@ export function monthlyBreakdown(entries: LedgerEntry[], a: string, b: string): 
   const line = (month: string) => {
     let l = months.get(month);
     if (!l) {
-      l = { month, paidBy: new Map(), paidBack: new Map(), change: 0 };
+      l = { month, paidBy: new Map(), paidBack: new Map(), intoJoint: new Map(), change: 0 };
       months.set(month, l);
     }
     return l;
   };
   const add = (m: Map<string, number>, k: string, v: number) => m.set(k, (m.get(k) ?? 0) + v);
-  // One expense appears once per other member; count its total once per payer.
-  const countedExpenses = new Set<string>();
+  // Expenses and joint movements appear once per other member; count each total once.
+  const counted = new Set<string>();
 
   for (const e of entries) {
     if (!((e.debtor === a && e.creditor === b) || (e.debtor === b && e.creditor === a))) continue;
     const l = line(`${e.entry_date.slice(0, 7)}-01`);
     l.change += e.debtor === b ? e.cents : -e.cents;
     if (e.entry_kind === 'expense') {
-      if (!countedExpenses.has(e.ref_id)) {
-        countedExpenses.add(e.ref_id);
+      if (!counted.has(e.ref_id)) {
+        counted.add(e.ref_id);
         add(l.paidBy, e.creditor, e.total_cents);
+      }
+    } else if (e.entry_kind === 'contribution' || e.entry_kind === 'withdrawal') {
+      if (!counted.has(e.ref_id)) {
+        counted.add(e.ref_id);
+        if (e.entry_kind === 'contribution') add(l.intoJoint, e.creditor, e.total_cents);
+        else add(l.intoJoint, e.debtor, -e.total_cents);
       }
     } else {
       // A payback from X to Y makes Y the debtor: X (the creditor) paid.

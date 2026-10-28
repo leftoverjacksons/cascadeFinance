@@ -6,11 +6,12 @@
 --   * What is shared: categories carry a "shared by default" flag; any
 --     transaction can override it (transactions.shared_override).
 --   * Split: household_members.split_weight (equal weights = 50/50).
---   * Paybacks: a transfer from one member's personal account to another's,
---     directly or in two hops through a joint account (same amount within a
---     week), counts as a payback unless marked otherwise
---     (settlement_overrides). Payments outside the accounts (cash, Venmo) are
---     recorded in manual_settlements.
+--   * Joint accounts are a shared pot: money a member puts in counts as
+--     paying toward shared costs, money taken out to a personal account counts
+--     against them, and spending from the pot creates no debt.
+--   * Paybacks: a transfer between two members' personal accounts. Any of
+--     these movements can be excluded (settlement_overrides). Payments outside
+--     the accounts (cash, Venmo) are recorded in manual_settlements.
 --   * The ledger starts at households.shared_since (null = all history).
 
 -- ---------------------------------------------------------------------------
@@ -340,91 +341,72 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
--- Member-to-member transfers (direct, or two hops through a joint account)
+-- Money moving between members and the joint pot
 -- ---------------------------------------------------------------------------
-
--- Days allowed between money reaching the joint account and leaving it again
--- for the second hop.
-create function private.joint_hop_window() returns integer language sql immutable as 'select 7';
+--
+-- Contribution model (docs/DESIGN.md §9a, revised 2026-10-28): joint accounts
+-- are a shared pot that pays shared costs (e.g. the mortgage). Each linked
+-- transfer with a personal account on at least one side is one of:
+--   payback       personal -> another member's personal account
+--   contribution  personal -> joint   (that member paid toward shared costs)
+--   withdrawal    joint -> personal   (that member took shared money back)
+-- Transfers between a member's own accounts, and between joint accounts, are
+-- not listed. Spending from joint accounts creates no debt: the pot paid it.
+-- A two-hop transfer (A -> joint -> B) nets to a payback from A to B.
+-- Each entry counts unless switched off (settlement_overrides, keyed by the
+-- outgoing transaction so it survives re-matching).
 
 create function public.member_transfers()
 returns table (
-  link_id       uuid,     -- first (or only) hop
-  second_link   uuid,     -- second hop when routed through a joint account
-  out_txn_id    uuid,     -- the money leaving the sender; key for settlement_overrides
-  from_user     uuid,
-  to_user       uuid,
-  sent_on       date,
-  received_on   date,
-  amount_cents  bigint,
-  via_account   uuid,     -- the joint account, for two-hop transfers
-  is_settlement boolean
+  link_id      uuid,
+  out_txn_id   uuid,
+  kind         text,
+  from_user    uuid,   -- null when the money left a joint account
+  to_user      uuid,   -- null when the money went into a joint account
+  from_account uuid,
+  to_account   uuid,
+  sent_on      date,
+  received_on  date,
+  amount_cents bigint,
+  counted      boolean
 )
-language plpgsql
+language sql
 stable
 security invoker
 set search_path = ''
 as $$
-declare
-  r    record;
-  used uuid[] := '{}';
-begin
-  -- Direct: personal account -> another member's personal account.
-  return query
-  select l.id, null::uuid, l.out_txn_id, ao.owner_user_id, ai.owner_user_id, o.posted_on, i.posted_on,
-         -o.amount_cents, null::uuid, coalesce(so.is_settlement, true)
+  select l.id, l.out_txn_id,
+         case
+           when ao.owner_user_id is not null and ai.owner_user_id is not null then 'payback'
+           when ao.owner_user_id is not null then 'contribution'
+           else 'withdrawal'
+         end,
+         ao.owner_user_id, ai.owner_user_id, ao.id, ai.id,
+         o.posted_on, i.posted_on, -o.amount_cents,
+         coalesce(so.is_settlement, true)
   from public.transfer_links l
   join public.transactions o on o.id = l.out_txn_id
   join public.transactions i on i.id = l.in_txn_id
   join public.accounts ao on ao.id = o.account_id
   join public.accounts ai on ai.id = i.account_id
   left join public.settlement_overrides so on so.out_txn_id = l.out_txn_id
-  where ao.owner_user_id is not null and ai.owner_user_id is not null
-    and ao.owner_user_id <> ai.owner_user_id;
-
-  -- Two hops: member X -> joint, then joint -> member Y (Y <> X), same amount,
-  -- second hop leaving within a week of the first arriving. Closest first,
-  -- each hop used once.
-  for r in
-    select l1.id as l1, l2.id as l2, l1.out_txn_id as first_out, ao.owner_user_id as x, ai.owner_user_id as y,
-           o1.posted_on as sent, i2.posted_on as received, -o1.amount_cents as amount,
-           i1.account_id as via, o2.posted_on - i1.posted_on as gap
-    from public.transfer_links l1
-    join public.transactions o1 on o1.id = l1.out_txn_id
-    join public.transactions i1 on i1.id = l1.in_txn_id
-    join public.accounts ao on ao.id = o1.account_id
-    join public.accounts aj on aj.id = i1.account_id
-    join public.transactions o2 on o2.account_id = i1.account_id and o2.amount_cents = o1.amount_cents
-    join public.transfer_links l2 on l2.out_txn_id = o2.id
-    join public.transactions i2 on i2.id = l2.in_txn_id
-    join public.accounts ai on ai.id = i2.account_id
-    where ao.owner_user_id is not null
-      and aj.owner_user_id is null
-      and ai.owner_user_id is not null
-      and ai.owner_user_id <> ao.owner_user_id
-      and o2.posted_on between i1.posted_on and i1.posted_on + private.joint_hop_window()
-    order by gap, sent, l1.id, l2.id
-  loop
-    if r.l1 = any (used) or r.l2 = any (used) then
-      continue;
-    end if;
-    used := used || r.l1 || r.l2;
-    return query
-    select r.l1, r.l2, r.first_out, r.x, r.y, r.sent, r.received, r.amount, r.via,
-           coalesce((select so.is_settlement from public.settlement_overrides so where so.out_txn_id = r.first_out), true);
-  end loop;
-end;
+  where (ao.owner_user_id is not null or ai.owner_user_id is not null)
+    and ao.owner_user_id is distinct from ai.owner_user_id
+  order by i.posted_on desc, l.id;
 $$;
 
 -- ---------------------------------------------------------------------------
 -- Ledger: every entry that moves the balance between two members
 -- ---------------------------------------------------------------------------
 --   debtor owes creditor `cents` because of this entry.
---   expense     a shared expense paid from the creditor's personal account;
---               one row per other member, for their share
---   payback     a member-to-member transfer marked as a payback
---               (the receiver now owes the sender)
---   manual      a recorded payment outside the accounts
+--   expense       shared expense paid from the creditor's personal account;
+--                 one row per other member, for their share
+--   contribution  creditor put money into a joint account; one row per other
+--                 member, for their share
+--   withdrawal    debtor took money out of a joint account; one row per other
+--                 member (the creditor), for that member's share
+--   payback       a transfer between personal accounts: the receiver owes the sender
+--   manual        a payment recorded by hand
 
 create function public.shared_ledger()
 returns table (
@@ -443,14 +425,15 @@ security invoker
 set search_path = ''
 as $$
   with h as (
-    select m.household_id, hh.shared_since,
-           sum(m.split_weight) over () as total_weight
-    from public.household_members m
-    join public.households hh on hh.id = m.household_id
+    select hh.shared_since, (select sum(m.split_weight) from public.household_members m) as total_weight
+    from public.households hh
     limit 1
   ),
   members as (
     select m.user_id, m.split_weight from public.household_members m
+  ),
+  since as (
+    select coalesce((select shared_since from h), '-infinity'::date) as d
   ),
   shared_txns as (
     select t.id, t.posted_on, t.display_description, -t.amount_cents as spent, a.owner_user_id as payer
@@ -462,24 +445,37 @@ as $$
       and coalesce(t.shared_override, c.is_shared, false)
       and (c.kind = 'expense' or t.category_id is null)
       and not exists (select 1 from public.transfer_links l where l.out_txn_id = t.id or l.in_txn_id = t.id)
-      and t.posted_on >= coalesce((select shared_since from h), '-infinity'::date)
+      and t.posted_on >= (select d from since)
+  ),
+  moves as (
+    select * from public.member_transfers() mt
+    where mt.counted and mt.received_on >= (select d from since)
   )
   select 'expense', s.posted_on, s.id, s.display_description, s.spent, m.user_id, s.payer,
          round(s.spent * m.split_weight / (select total_weight from h))::bigint
   from shared_txns s
   join members m on m.user_id <> s.payer
   union all
-  select 'payback', mt.received_on, mt.link_id,
-         case when mt.via_account is null then 'Transfer' else 'Transfer via joint account' end,
-         mt.amount_cents, mt.to_user, mt.from_user, mt.amount_cents
-  from public.member_transfers() mt
-  where mt.is_settlement
-    and mt.received_on >= coalesce((select shared_since from h), '-infinity'::date)
+  select 'contribution', mv.received_on, mv.out_txn_id, 'Into joint account', mv.amount_cents, m.user_id, mv.from_user,
+         round(mv.amount_cents * m.split_weight / (select total_weight from h))::bigint
+  from moves mv
+  join members m on m.user_id <> mv.from_user
+  where mv.kind = 'contribution'
+  union all
+  select 'withdrawal', mv.received_on, mv.out_txn_id, 'Out of joint account', mv.amount_cents, mv.to_user, m.user_id,
+         round(mv.amount_cents * m.split_weight / (select total_weight from h))::bigint
+  from moves mv
+  join members m on m.user_id <> mv.to_user
+  where mv.kind = 'withdrawal'
+  union all
+  select 'payback', mv.received_on, mv.out_txn_id, 'Transfer', mv.amount_cents, mv.to_user, mv.from_user, mv.amount_cents
+  from moves mv
+  where mv.kind = 'payback'
   union all
   select 'manual', ms.settled_on, ms.id, coalesce(ms.note, 'Payment'), ms.amount_cents,
          ms.to_user_id, ms.from_user_id, ms.amount_cents
   from public.manual_settlements ms
-  where ms.settled_on >= coalesce((select shared_since from h), '-infinity'::date)
+  where ms.settled_on >= (select d from since)
   order by 2 desc, 1, 3;
 $$;
 

@@ -386,7 +386,7 @@ isOneToOne: false
                            },
 "member_transfers":
 { Args: Record<PropertyKey, never>; Returns: {
-              "amount_cents": number,"from_user": string,"is_settlement": boolean,"link_id": string,"out_txn_id": string,"received_on": string,"second_link": string,"sent_on": string,"to_user": string,"via_account": string
+              "amount_cents": number,"counted": boolean,"from_account": string,"from_user": string,"kind": string,"link_id": string,"out_txn_id": string,"received_on": string,"sent_on": string,"to_account": string,"to_user": string
             }[]
                            },
 "money_flows":
