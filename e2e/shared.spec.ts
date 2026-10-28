@@ -88,7 +88,7 @@ test('shared expenses, paybacks and settling up', async ({ page }) => {
   await transactionRows(page).filter({ hasText: 'Publix' }).click();
   const detail = transactionDetail(page);
   await detail.getByTestId('shared-setting').locator('ion-select').click();
-  await page.getByRole('radio', { name: 'Not shared' }).click();
+  await page.getByRole('radio', { name: 'Not shared', exact: true }).click();
   await page.getByRole('button', { name: 'OK' }).click();
   await detail.getByRole('button', { name: 'Save' }).click();
 

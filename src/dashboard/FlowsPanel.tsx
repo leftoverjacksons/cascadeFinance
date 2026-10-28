@@ -2,9 +2,16 @@ import { useIonToast } from '@ionic/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import SankeyDiagram, { type SankeyPositions, type SankeyStacks } from '../charts/SankeyDiagram';
-import { buildSankey, type FlowRow, type SankeyGraph, type SankeyNode } from '../domain/flows';
+import {
+  buildSankey,
+  buildZoom,
+  type FlowRow,
+  type SankeyGraph,
+  type SankeyNode,
+  type ZoomGraph,
+} from '../domain/flows';
 import { formatCents, formatCentsWhole } from '../domain/money';
-import { OTHER } from '../domain/summary';
+import { OTHER, UNCATEGORIZED } from '../domain/summary';
 import { useRequiredHousehold } from '../household/HouseholdProvider';
 import type { Json } from '../lib/database.types';
 import { supabase } from '../lib/supabase';
@@ -113,6 +120,9 @@ export default function FlowsPanel(props: PanelProps) {
   const [showTable, setShowTable] = useState(false);
   const [view, setView] = useState<FlowView>(storedView);
   const [layout, setLayout] = useSavedLayout();
+  // Zoomed into a spending node: that node and what it is made of.
+  const [zoom, setZoom] = useState<SankeyNode | null>(null);
+  const [zoomed, setZoomed] = useState<(ZoomGraph & { rows: FlowRow[] }) | null>(null);
   const from = model.shown[0]?.month;
   const to = model.data.today;
 
@@ -151,6 +161,46 @@ export default function FlowsPanel(props: PanelProps) {
     });
   }, [rows, model.accounts, model.byId, model.series, members, view, personOf]);
 
+  // Zoom: fetch the transactions behind the node (every flow into it) and split them.
+  useEffect(() => {
+    setZoomed(null);
+    if (!zoom || !graph || !from) return;
+    const node = graph.nodes.find((n) => n.key === zoom.key);
+    if (!node) return setZoom(null); // gone in this period or view
+    const rows = graph.links
+      .filter((l) => l.to === node.key)
+      .flatMap((l) => graph.rowsByLink?.get(`${l.from}>${l.to}`) ?? []);
+    let cancelled = false;
+    supabase
+      .rpc('money_flow_transactions', {
+        p_from: from,
+        p_to: to,
+        p_kinds: rows.map((r) => r.kind),
+        p_sources: rows.map((r) => r.source),
+        p_targets: rows.map((r) => r.target),
+      })
+      .then(({ data }) => {
+        if (!cancelled) setZoomed({ ...buildZoom(node, data ?? [], model.byId), rows });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [zoom, graph, from, to, model.byId]);
+  const shown = zoom ? (zoomed?.graph ?? null) : graph;
+  const zoomInto = useCallback(
+    (node: SankeyNode | null) => {
+      onFlow(null);
+      setZoom(node);
+    },
+    [onFlow],
+  );
+  // Spending groups (and "Other spending") can be zoomed into; not Uncategorized.
+  const nodeActions = useCallback(
+    (n: SankeyNode) =>
+      !zoom && n.role === 'spend' && n.group !== UNCATEGORIZED ? [{ label: 'Zoom in', run: () => zoomInto(n) }] : [],
+    [zoom, zoomInto],
+  );
+
   function changeView(next: FlowView) {
     setView(next);
     onFlow(null); // flows differ between the views
@@ -163,16 +213,16 @@ export default function FlowsPanel(props: PanelProps) {
 
   const largest = useMemo(() => {
     const totals = new Map<string, number>();
-    for (const l of graph?.links ?? []) {
+    for (const l of shown?.links ?? []) {
       totals.set(l.from, (totals.get(l.from) ?? 0) + l.cents);
       totals.set(l.to, (totals.get(l.to) ?? 0) + l.cents);
     }
     return Math.max(0, ...totals.values());
-  }, [graph]);
-  const drawn = useMemo(() => (graph?.links ?? []).filter((l) => l.cents >= largest * MIN_SHARE), [graph, largest]);
-  const hidden = (graph?.links.length ?? 0) - drawn.length;
+  }, [shown]);
+  const drawn = useMemo(() => (shown?.links ?? []).filter((l) => l.cents >= largest * MIN_SHARE), [shown, largest]);
+  const hidden = (shown?.links.length ?? 0) - drawn.length;
 
-  const drawnGraph = useMemo(() => (graph ? { ...graph, links: drawn } : null), [graph, drawn]);
+  const drawnGraph = useMemo(() => (shown ? { ...shown, links: drawn } : null), [shown, drawn]);
   // Whose an account or money-in node is: 0 or 1 (household member order), or
   // undefined (joint, or not a person's). Money in belongs to whoever's account
   // it mostly lands in.
@@ -220,45 +270,81 @@ export default function FlowsPanel(props: PanelProps) {
 
   const select = useCallback(
     (key: string | null) => {
-      const link = key ? graph?.links.find((l) => `${l.from}>${l.to}` === key) : undefined;
-      if (!graph || !key || !link || !from) return onFlow(null);
-      const name = (k: string) => graph.nodes.find((n) => n.key === k)?.label ?? k;
+      const link = key ? shown?.links.find((l) => `${l.from}>${l.to}` === key) : undefined;
+      if (!shown || !key || !link || !from) return onFlow(null);
+      const name = (k: string) => shown.nodes.find((n) => n.key === k)?.label ?? k;
       onFlow({
         key,
         label: `${name(link.from)} → ${name(link.to)}`,
         cents: link.cents,
         from,
         to,
-        rows: graph.rowsByLink?.get(key) ?? [],
+        // Zoomed in: the node's transactions, narrowed to the part's categories.
+        ...(zoom && zoomed
+          ? { rows: zoomed.rows, categoryIds: zoomed.categoryIds.get(link.to) ?? [] }
+          : { rows: shown.rowsByLink?.get(key) ?? [] }),
       });
     },
-    [graph, from, to, onFlow],
+    [shown, zoom, zoomed, from, to, onFlow],
   );
 
-  if (!graph) return <p className="caption">Loading…</p>;
-  if (graph.links.length === 0) return <p className="caption">No money movements in this period.</p>;
+  const zoomOut = (
+    <button className="link-like" onClick={() => zoomInto(null)}>
+      ← All money
+    </button>
+  );
+  if (!shown) {
+    return zoom ? (
+      <p className="caption">
+        {zoomOut} Loading {zoom.label}…
+      </p>
+    ) : (
+      <p className="caption">Loading…</p>
+    );
+  }
+  if (shown.links.length === 0) {
+    return zoom ? (
+      <p className="caption">
+        {zoomOut} Nothing to show for {zoom.label} in this period.
+      </p>
+    ) : (
+      <p className="caption">No money movements in this period.</p>
+    );
+  }
 
-  const label = (key: string) => graph.nodes.find((n) => n.key === key)?.label ?? key;
+  const label = (key: string) => shown.nodes.find((n) => n.key === key)?.label ?? key;
   return (
     <div className="flows">
       <div className="flows-toggle">
-        <span className="flows-legend" aria-label="Colours">
-          {[...members.slice(0, 2).map((m, i) => [m.display_name, `var(--person-${i + 1})`]), ['Joint', 'var(--person-joint)']].map(
-            ([name, c]) => (
-              <span key={name}>
-                <i style={{ background: c }} />
-                {name}
-              </span>
-            ),
-          )}
-        </span>
-        <span className="flows-view" role="group" aria-label="Show">
-          {(['accounts', 'people'] as const).map((v) => (
-            <button key={v} className="link-like" aria-pressed={view === v} onClick={() => changeView(v)}>
-              {v === 'accounts' ? 'Accounts' : 'People'}
-            </button>
-          ))}
-        </span>
+        {zoom ? (
+          <span className="flows-zoom" data-testid="flows-zoom">
+            {zoomOut}
+            <strong>
+              {zoom.label} · {formatCentsWhole(shown.links.reduce((t, l) => t + l.cents, 0))}
+            </strong>
+          </span>
+        ) : (
+          <>
+            <span className="flows-legend" aria-label="Colours">
+              {[
+                ...members.slice(0, 2).map((m, i) => [m.display_name, `var(--person-${i + 1})`]),
+                ['Joint', 'var(--person-joint)'],
+              ].map(([name, c]) => (
+                <span key={name}>
+                  <i style={{ background: c }} />
+                  {name}
+                </span>
+              ))}
+            </span>
+            <span className="flows-view" role="group" aria-label="Show">
+              {(['accounts', 'people'] as const).map((v) => (
+                <button key={v} className="link-like" aria-pressed={view === v} onClick={() => changeView(v)}>
+                  {v === 'accounts' ? 'Accounts' : 'People'}
+                </button>
+              ))}
+            </span>
+          </>
+        )}
         {hidden > 0 && !showTable && (
           <span className="flows-note">
             {hidden} small flow{hidden === 1 ? '' : 's'} not drawn ·{' '}
@@ -290,7 +376,7 @@ export default function FlowsPanel(props: PanelProps) {
               </tr>
             </thead>
             <tbody>
-              {[...graph.links]
+              {[...shown.links]
                 .sort((a, b) => b.cents - a.cents)
                 .map((l) => (
                   <tr
@@ -311,7 +397,7 @@ export default function FlowsPanel(props: PanelProps) {
           graph={drawnGraph!}
           colorOf={colorOf}
           sideOf={sideOf}
-          label="Money flow from income through accounts to spending"
+          label={zoom ? `What ${zoom.label} is made of` : 'Money flow from income through accounts to spending'}
           height={fill ? undefined : 460}
           positions={layout.nodes}
           onPositionsChange={(nodes) => setLayout({ nodes })}
@@ -319,6 +405,7 @@ export default function FlowsPanel(props: PanelProps) {
           onStacksChange={(stacks) => setLayout({ stacks })}
           selected={flow?.key ?? null}
           onSelect={select}
+          nodeActions={nodeActions}
         />
       )}
       {flow && !transactionsShown && (

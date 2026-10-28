@@ -78,7 +78,8 @@ export default function TransactionModal({
   const linked = t ? !!transferLinks?.byTxn.get(t.id) : false;
   const canShare =
     !!t && !pending && !!account?.owner_user_id && !linked && (!savedCategory || savedCategory.kind === 'expense');
-  const categoryShared = savedCategory?.is_shared ?? false;
+  // Unknown while categories are still loading: say nothing rather than guess.
+  const categoryShared = t?.category_id && !savedCategory ? null : (savedCategory?.is_shared ?? false);
   const initialCategory = t ? (t.category_source === 'manual' ? t.category_id! : AUTOMATIC) : AUTOMATIC;
   const categoryChanged = category !== initialCategory;
   const canMakeRule = category !== AUTOMATIC && !pending;
@@ -272,7 +273,7 @@ export default function TransactionModal({
               onIonChange={(e) => setShared(e.detail.value as 'default' | 'yes' | 'no')}
             >
               <IonSelectOption value="default">
-                Category default ({categoryShared ? 'shared' : 'not shared'})
+                Category default{categoryShared === null ? '' : categoryShared ? ' (shared)' : ' (not shared)'}
               </IonSelectOption>
               <IonSelectOption value="yes">Shared</IonSelectOption>
               <IonSelectOption value="no">Not shared</IonSelectOption>

@@ -30,15 +30,15 @@ export default function TransactionsPanel({ onDataChanged, flow, onFlow }: Panel
   const load = useCallback(async () => {
     const id = ++requestId.current;
     if (flow) {
-      const { data } = await supabase
-        .rpc('money_flow_transactions', {
-          p_from: flow.from,
-          p_to: flow.to,
-          p_kinds: flow.rows.map((r) => r.kind),
-          p_sources: flow.rows.map((r) => r.source),
-          p_targets: flow.rows.map((r) => r.target),
-        })
-        .limit(LIMIT);
+      let q = supabase.rpc('money_flow_transactions', {
+        p_from: flow.from,
+        p_to: flow.to,
+        p_kinds: flow.rows.map((r) => r.kind),
+        p_sources: flow.rows.map((r) => r.source),
+        p_targets: flow.rows.map((r) => r.target),
+      });
+      if (flow.categoryIds) q = q.in('category_id', flow.categoryIds);
+      const { data } = await q.limit(LIMIT);
       if (id === requestId.current) setRows(data ?? []);
       return;
     }

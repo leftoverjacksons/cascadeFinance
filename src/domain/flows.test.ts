@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { breakCycles, buildSankey, layoutSankey, netTransfers, type FlowRow } from './flows';
+import { breakCycles, buildSankey, buildZoom, layoutSankey, netTransfers, type FlowRow } from './flows';
 import { OTHER } from './summary';
 
 const names = {
@@ -186,3 +186,60 @@ describe('accountGroup (people view)', () => {
   });
 });
 
+
+describe('buildZoom', () => {
+  const categories = new Map([
+    ['food', { name: 'Food & Dining', parent_id: null }],
+    ['groc', { name: 'Groceries', parent_id: 'food' }],
+    ['rest', { name: 'Restaurants', parent_id: 'food' }],
+    ['pets', { name: 'Pets', parent_id: null }],
+    ['vet', { name: 'Vet', parent_id: 'pets' }],
+  ]);
+
+  it('splits a spending group into its categories, refunds netted', () => {
+    const { graph, categoryIds } = buildZoom(
+      { key: 'spend:food', label: 'Food & Dining', role: 'spend', group: 'food' },
+      [
+        { category_id: 'groc', amount_cents: -6000 },
+        { category_id: 'groc', amount_cents: 1000 },
+        { category_id: 'rest', amount_cents: -3000 },
+        { category_id: 'food', amount_cents: -500 },
+      ],
+      categories,
+    );
+    expect(graph.links.map((l) => [l.to, l.cents])).toEqual([
+      ['sub:groc', 5000],
+      ['sub:rest', 3000],
+      ['sub:food', 500],
+    ]);
+    expect(graph.nodes.find((n) => n.key === 'sub:food')?.label).toBe('Food & Dining (general)');
+    expect(categoryIds.get('sub:groc')).toEqual(['groc']);
+    // Adds up to the node it zooms into.
+    expect(graph.links.reduce((t, l) => t + l.cents, 0)).toBe(8500);
+  });
+
+  it('splits "Other spending" into the groups folded into it', () => {
+    const { graph, categoryIds } = buildZoom(
+      { key: 'spend:other', label: 'Other spending', role: 'spend', group: OTHER },
+      [
+        { category_id: 'vet', amount_cents: -2000 },
+        { category_id: 'pets', amount_cents: -100 },
+      ],
+      categories,
+    );
+    expect(graph.links.map((l) => [l.to, l.cents])).toEqual([['sub:pets', 2100]]);
+    expect(categoryIds.get('sub:pets')?.sort()).toEqual(['pets', 'vet']);
+  });
+
+  it('leaves out parts that come to nothing', () => {
+    const { graph } = buildZoom(
+      { key: 'spend:food', label: 'Food & Dining', role: 'spend', group: 'food' },
+      [
+        { category_id: 'groc', amount_cents: -1000 },
+        { category_id: 'groc', amount_cents: 1000 },
+      ],
+      categories,
+    );
+    expect(graph.links).toEqual([]);
+  });
+});

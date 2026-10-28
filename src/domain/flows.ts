@@ -347,3 +347,54 @@ export function layoutSankey(graph: SankeyGraph): SankeyLayout {
   return { column, priority };
 }
 
+
+/** A transaction as the zoomed-in view needs it. */
+export interface ZoomTransaction {
+  category_id: string | null;
+  amount_cents: number;
+}
+
+export interface ZoomGraph {
+  graph: SankeyGraph;
+  /** For each subcategory node, the categories whose transactions it holds (for listing them). */
+  categoryIds: Map<string, string[]>;
+}
+
+/**
+ * The zoomed-in view of one spending node: the node on the left, what it is
+ * made of on the right, from the transactions behind it (refunds net off;
+ * parts that come to nothing or less are left out).
+ *
+ *   - a spending group splits into its categories (money filed under the
+ *     group itself shows as "<group> (general)");
+ *   - "Other spending" splits into the groups folded into it.
+ */
+export function buildZoom(
+  root: SankeyNode,
+  transactions: ZoomTransaction[],
+  categories: Map<string, { name: string; parent_id: string | null }>,
+): ZoomGraph {
+  const byGroups = root.group === OTHER;
+  const totals = new Map<string, number>();
+  const members = new Map<string, Set<string>>();
+  for (const t of transactions) {
+    if (!t.category_id) continue;
+    const part = byGroups ? (categories.get(t.category_id)?.parent_id ?? t.category_id) : t.category_id;
+    totals.set(part, (totals.get(part) ?? 0) - t.amount_cents);
+    members.set(part, (members.get(part) ?? new Set()).add(t.category_id));
+  }
+  const rootKey = `zoom:${root.key}`;
+  const nodes: SankeyNode[] = [{ key: rootKey, label: root.label, role: 'spend', group: root.group }];
+  const links: SankeyLink[] = [];
+  const categoryIds = new Map<string, string[]>();
+  for (const [part, cents] of [...totals].sort((a, b) => b[1] - a[1])) {
+    if (cents <= 0) continue;
+    const key = `sub:${part}`;
+    const name = categories.get(part)?.name ?? 'Category';
+    const general = !byGroups && part === root.group;
+    nodes.push({ key, label: general ? `${name} (general)` : name, role: 'spend', group: root.group });
+    links.push({ from: rootKey, to: key, cents });
+    categoryIds.set(key, [...members.get(part)!]);
+  }
+  return { graph: { nodes, links }, categoryIds };
+}

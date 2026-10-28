@@ -31,6 +31,8 @@ export interface FlowSelection {
   from: string;
   to: string;
   rows: FlowRow[];
+  /** Only transactions in these categories (a zoomed-in view's subcategory). */
+  categoryIds?: string[];
 }
 
 export interface PanelDef {

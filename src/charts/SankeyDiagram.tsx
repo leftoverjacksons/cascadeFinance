@@ -2,15 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { SankeyGraph, SankeyNode } from '../domain/flows';
 import { formatCents } from '../domain/money';
 import { placeSankey } from './sankeyLayout';
-import {
-  initialState,
-  linkKey,
-  settle,
-  stackKey,
-  step,
-  type PhysicsState,
-  type PhysicsWorld,
-} from './sankeyPhysics';
+import { initialState, linkKey, settle, stackKey, step, type PhysicsState, type PhysicsWorld } from './sankeyPhysics';
 
 interface Props {
   graph: SankeyGraph;
@@ -30,6 +22,13 @@ interface Props {
   /** Selected link ("from>to"): stays highlighted. */
   selected: string | null;
   onSelect: (link: string | null) => void;
+  /** Extra items for a node's menu (right-click, or click/tap without dragging), e.g. "Zoom in". */
+  nodeActions?: (node: SankeyNode) => NodeAction[];
+}
+
+export interface NodeAction {
+  label: string;
+  run: () => void;
 }
 
 export type SankeyPositions = Record<string, { x: number; y: number }>;
@@ -68,6 +67,14 @@ interface Drag {
   startY: number;
   x: number;
   y: number;
+  /** Moved beyond a small threshold: a drag, not a click. */
+  moved: boolean;
+}
+
+interface Menu {
+  key: string;
+  x: number;
+  y: number;
 }
 
 /**
@@ -91,6 +98,7 @@ export default function SankeyDiagram({
   onStacksChange,
   selected,
   onSelect,
+  nodeActions,
 }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -272,12 +280,15 @@ export default function SankeyDiagram({
     const b = state.current.bodies.get(key);
     if (!b) return;
     // Start from where the node is now (it may be mid-bounce).
-    drag.current = { key, startX: e.clientX, startY: e.clientY, x: b.x, y: b.y };
+    drag.current = { key, startX: e.clientX, startY: e.clientY, x: b.x, y: b.y, moved: false };
+    setMenu(null);
   };
   const moveDrag = (e: React.PointerEvent) => {
     const d = drag.current;
     const n = d && placed.nodes.find((x) => x.key === d.key);
     if (!d || !n || !area.width || !area.height) return;
+    if (!d.moved && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < 4) return; // still a click
+    d.moved = true;
     // Keep the node inside the drawing area.
     const x = clamp(d.x + e.clientX - d.startX, 0, area.width - (n.x1 - n.x0));
     const y = clamp(d.y + e.clientY - d.startY, 0, area.height - (n.y1 - n.y0));
@@ -285,10 +296,39 @@ export default function SankeyDiagram({
     onPositionsChange({ ...positions, [d.key]: { x: x / area.width, y: y / area.height } });
     run();
   };
-  const endDrag = () => {
+  const endDrag = (e: React.PointerEvent) => {
+    const d = drag.current;
     drag.current = null;
     run();
+    if (d && !d.moved && e.type === 'pointerup') openMenu(d.key, e); // a click: the node's menu
   };
+
+  // ── Node menu ──
+  const [menu, setMenu] = useState<Menu | null>(null);
+  const menuItems = (key: string): NodeAction[] => {
+    const n = graph.nodes.find((x) => x.key === key);
+    if (!n) return [];
+    return [...(nodeActions?.(n) ?? []), ...(positions[key] ? [{ label: 'Put back', run: () => release(key) }] : [])];
+  };
+  const openMenu = (key: string, e: { clientX: number; clientY: number }) => {
+    if (!menuItems(key).length) return setMenu(null);
+    const r = box.current!.getBoundingClientRect();
+    setHover(null);
+    setMenu({ key, x: e.clientX - r.left, y: e.clientY - r.top });
+  };
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e: Event) => {
+      if (!(e.target as Element).closest?.('.sankey-menu')) setMenu(null);
+    };
+    const escape = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(null);
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', close);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [menu]);
   // ── Reordering a tail within a node's stack ──
   const endAt = (key: string, e: React.PointerEvent): 'out' | 'in' | null => {
     const ends = linkEnds.current.get(key);
@@ -302,7 +342,13 @@ export default function SankeyDiagram({
     const side = endAt(linkKey(l), e);
     if (!side) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    tailDrag.current = { link: linkKey(l), node: side === 'out' ? l.from : l.to, side, startY: e.clientY, moved: false };
+    tailDrag.current = {
+      link: linkKey(l),
+      node: side === 'out' ? l.from : l.to,
+      side,
+      startY: e.clientY,
+      moved: false,
+    };
   };
   const moveTailDrag = (e: React.PointerEvent) => {
     const t = tailDrag.current;
@@ -314,7 +360,8 @@ export default function SankeyDiagram({
     // The node's other tails, top to bottom as they are now; the dragged one goes
     // in front of the first whose centre is below the pointer.
     const y = e.clientY - box.current!.getBoundingClientRect().top - MARGIN;
-    const end = (l: { from: string; to: string }) => state.current.offsets.get(linkKey(l))?.[t.side === 'out' ? 's' : 't'] ?? 0;
+    const end = (l: { from: string; to: string }) =>
+      state.current.offsets.get(linkKey(l))?.[t.side === 'out' ? 's' : 't'] ?? 0;
     const others = placed.links
       .filter((l) => (t.side === 'out' ? l.from : l.to) === t.node && linkKey(l) !== t.link)
       .sort((a, b) => end(a) - end(b));
@@ -424,6 +471,10 @@ export default function SankeyDiagram({
                 show(n.key, nodeText(n))(e);
               }}
               onDoubleClick={() => release(n.key)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                openMenu(n.key, e);
+              }}
               onPointerUp={endDrag}
               onPointerCancel={endDrag}
             >
@@ -455,7 +506,27 @@ export default function SankeyDiagram({
           ))}
         </g>
       </svg>
-      {hover && (
+      {menu && (
+        <div
+          className="sankey-menu"
+          role="menu"
+          style={{ left: Math.min(menu.x, Math.max(0, size.width - 160)), top: menu.y }}
+        >
+          {menuItems(menu.key).map((a) => (
+            <button
+              key={a.label}
+              role="menuitem"
+              onClick={() => {
+                setMenu(null);
+                a.run();
+              }}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {hover && !menu && (
         <div
           className="sankey-tip"
           style={{
