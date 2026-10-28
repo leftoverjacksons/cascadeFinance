@@ -35,7 +35,8 @@ test('overview: KPIs, spending table, statement balance and net worth', async ({
   await expect(overview.getByTestId('kpis')).toContainText('-$15,569');
   await expect(overview.getByTestId('balances-table')).toContainText('owes $18,000');
   await expect(overview.getByTestId('group-table')).toContainText('Food & Dining');
-  await expect(overview.locator('canvas')).toHaveCount(4);
+  await expect(overview.locator('canvas')).toHaveCount(3);
+  await expect(overview.getByTestId('sankey')).toBeVisible();
 
   // Expanding a group shows its categories.
   await overview.getByRole('button', { name: 'Food & Dining: show categories' }).click();
@@ -43,6 +44,7 @@ test('overview: KPIs, spending table, statement balance and net worth', async ({
 
   // Changing the period keeps everything rendering.
   await overview.locator('ion-segment-button', { hasText: '6 months' }).click();
-  await expect(overview.locator('canvas')).toHaveCount(4);
+  await expect(overview.locator('canvas')).toHaveCount(3);
+  await expect(overview.getByTestId('sankey')).toBeVisible();
   expect(errors).toEqual([]);
 });

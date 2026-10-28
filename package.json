@@ -22,7 +22,6 @@
     "@ionic/react-router": "^8.8.19",
     "@supabase/supabase-js": "^2.118.0",
     "chart.js": "^4.6.1",
-    "chartjs-chart-sankey": "0.14.0",
     "ionicons": "^7.4.0",
     "papaparse": "^5.7.0",
     "react": "^18.3.1",

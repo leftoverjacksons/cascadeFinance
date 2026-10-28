@@ -68,7 +68,7 @@ test('transfers between accounts are linked, reviewable, and shown as money flow
   // ── Money flow on the Overview ──
   await openTab(page, 'overview');
   const flows = activePage(page).locator('[data-panel=flows]');
-  await expect(flows.locator('canvas')).toBeVisible();
+  await expect(flows.getByTestId('sankey')).toBeVisible();
   await flows.getByRole('button', { name: 'Show as table' }).click();
   const table = flows.getByTestId('flows-table');
   await expect(table.locator('tr', { hasText: 'Joint' }).filter({ hasText: 'Main Checking' })).toContainText('$1,000');

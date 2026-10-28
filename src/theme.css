@@ -691,3 +691,26 @@ button.sort {
   margin: 0 0 4px;
   font-variant-numeric: tabular-nums;
 }
+
+/* Money-flow diagram (SVG). Labels get a halo in the surface colour so they stay legible over flows. */
+.sankey-label {
+  font-size: 12px;
+  fill: var(--chart-text);
+  stroke: var(--chart-surface);
+  stroke-width: 3px;
+  paint-order: stroke;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.sankey-tip {
+  position: absolute;
+  max-width: 220px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  background: var(--chart-surface);
+  color: var(--ion-text-color);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+}
