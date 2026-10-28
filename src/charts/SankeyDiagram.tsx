@@ -1,7 +1,8 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { SankeyGraph, SankeyNode } from '../domain/flows';
 import { formatCents } from '../domain/money';
 import { placeSankey } from './sankeyLayout';
+import { step, type Body, type PhysicsWorld } from './sankeyPhysics';
 
 interface Props {
   graph: SankeyGraph;
@@ -22,6 +23,11 @@ export type SankeyPositions = Record<string, { x: number; y: number }>;
 
 /** Room above and below so labels on the outermost nodes are not clipped. */
 const MARGIN = 10;
+/** Gap kept between nodes in a column while they move. */
+const GAP = 6;
+const REVEAL_MS = 1100;
+
+const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
 interface Hover {
   /** Node key, or "from>to" for a link. */
@@ -41,9 +47,11 @@ interface Drag {
 }
 
 /**
- * Interactive money-flow diagram drawn as SVG: hover for amounts, drag a node
- * to move it (its flows follow), click a flow to select it. Colours follow the
- * light/dark theme through CSS variables.
+ * Interactive money-flow diagram drawn as SVG: hover for amounts, click a flow
+ * to select it, drag a node to move it. Nodes are on springs (sankeyPhysics):
+ * a dragged node stays where it is put (double-click releases it) and tugs the
+ * nodes it exchanges money with along. Flows are revealed left to right when
+ * the data changes. Colours follow the light/dark theme through CSS variables.
  */
 export default function SankeyDiagram({
   graph,
@@ -86,11 +94,84 @@ export default function SankeyDiagram({
     () => placeSankey(graph, { width: size.width, height: Math.max(0, size.height - 2 * MARGIN) }),
     [graph, size],
   );
-  // Apply dragged offsets to nodes and the ends of their links.
-  const moved = useMemo(() => {
+
+  // ── Physics ──
+  const world: PhysicsWorld = useMemo(() => {
+    const columns = [...new Set(placed.nodes.map((n) => Math.round(n.x0)))].sort((a, b) => a - b);
+    return {
+      nodes: placed.nodes.map((n) => ({
+        key: n.key,
+        x: n.x0,
+        y: n.y0,
+        height: n.y1 - n.y0,
+        column: columns.indexOf(Math.round(n.x0)),
+      })),
+      links: placed.links,
+      pinned: new Map(
+        placed.nodes
+          .filter((n) => positions[n.key])
+          .map((n) => [n.key, { x: n.x0 + positions[n.key].x * size.width, y: n.y0 + positions[n.key].y * size.height }]),
+      ),
+      height: Math.max(0, size.height - 2 * MARGIN),
+      gap: GAP,
+    };
+  }, [placed, positions, size]);
+  const bodies = useRef(new Map<string, Body>());
+  const worldRef = useRef(world);
+  worldRef.current = world;
+  const frameRef = useRef(0);
+  const [, setFrame] = useState(0);
+  const run = useCallback(() => {
+    if (frameRef.current) return;
+    const tick = () => {
+      let moving = step(worldRef.current, bodies.current, drag.current?.key ?? null);
+      // Reduced motion: jump straight to rest.
+      for (let i = 0; moving && reducedMotion() && i < 500; i++) {
+        moving = step(worldRef.current, bodies.current, drag.current?.key ?? null);
+      }
+      setFrame((f) => f + 1);
+      frameRef.current = moving ? requestAnimationFrame(tick) : 0;
+    };
+    frameRef.current = requestAnimationFrame(tick);
+  }, []);
+  useEffect(() => run(), [world, run]);
+  useEffect(
+    () => () => {
+      cancelAnimationFrame(frameRef.current);
+      frameRef.current = 0; // so a remount (e.g. React's dev double mount) can start it again
+    },
+    [],
+  );
+
+  // ── Reveal flows left to right when the data changes ──
+  const reveal = useRef<SVGRectElement>(null);
+  const widthRef = useRef(size.width);
+  widthRef.current = size.width;
+  useEffect(() => {
+    const rect = reveal.current;
+    if (!rect || reducedMotion()) return;
+    let raf = 0;
+    const start = performance.now();
+    const frame = (now: number) => {
+      const t = Math.min(1, (now - start) / REVEAL_MS);
+      const eased = 1 - Math.pow(1 - t, 3);
+      rect.setAttribute('width', t < 1 ? String(eased * widthRef.current) : '100%');
+      if (t < 1) raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(raf);
+      rect.setAttribute('width', '100%');
+    };
+  }, [graph]);
+
+  // Nodes where the physics has them; links follow their ends. (Recomputed
+  // every render: the physics re-renders once per animation frame.)
+  const moved = (() => {
     const off = (key: string) => {
-      const p = positions[key];
-      return p ? { dx: p.x * size.width, dy: p.y * size.height } : { dx: 0, dy: 0 };
+      const b = bodies.current.get(key);
+      const n = placed.nodes.find((x) => x.key === key);
+      return b && n ? { dx: b.x - n.x0, dy: b.y - n.y0 } : { dx: 0, dy: 0 };
     };
     return {
       nodes: placed.nodes.map((n) => {
@@ -105,7 +186,7 @@ export default function SankeyDiagram({
         ty: l.ty + off(l.to).dy,
       })),
     };
-  }, [placed, positions, size]);
+  })();
 
   const color = useMemo(() => new Map(graph.nodes.map((n) => [n.key, colorOf(n)])), [graph, colorOf]);
   const labelOf = (key: string) => graph.nodes.find((n) => n.key === key)?.label ?? key;
@@ -123,8 +204,11 @@ export default function SankeyDiagram({
 
   const startDrag = (key: string) => (e: React.PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId);
-    const p = positions[key] ?? { x: 0, y: 0 };
-    drag.current = { key, startX: e.clientX, startY: e.clientY, dx: p.x * size.width, dy: p.y * size.height };
+    const n = placed.nodes.find((x) => x.key === key);
+    const b = bodies.current.get(key);
+    if (!n) return;
+    // Start from where the node is now (it may be mid-bounce).
+    drag.current = { key, startX: e.clientX, startY: e.clientY, dx: (b?.x ?? n.x0) - n.x0, dy: (b?.y ?? n.y0) - n.y0 };
   };
   const moveDrag = (e: React.PointerEvent) => {
     const d = drag.current;
@@ -134,12 +218,21 @@ export default function SankeyDiagram({
     // Keep the node inside the drawing area.
     const dx = clamp(d.dx + e.clientX - d.startX, -n.x0, size.width - n.x1);
     const dy = clamp(d.dy + e.clientY - d.startY, -n.y0 - MARGIN, size.height - MARGIN - n.y1);
+    bodies.current.set(d.key, { x: n.x0 + dx, y: n.y0 + dy, vx: 0, vy: 0 });
     if (size.width && size.height) {
       onPositionsChange({ ...positions, [d.key]: { x: dx / size.width, y: dy / size.height } });
     }
+    run();
   };
   const endDrag = () => {
     drag.current = null;
+    run();
+  };
+  const release = (key: string) => {
+    if (!positions[key]) return;
+    const rest = { ...positions };
+    delete rest[key];
+    onPositionsChange(rest);
   };
 
   return (
@@ -156,6 +249,9 @@ export default function SankeyDiagram({
       )}
       <svg width={size.width} height={size.height} role="img" aria-label={label} data-testid="sankey">
         <defs>
+          <clipPath id={`${uid}-reveal`}>
+            <rect ref={reveal} x={0} y={-MARGIN} width="100%" height={size.height + MARGIN} />
+          </clipPath>
           {moved.links.map((l, i) => (
             <linearGradient key={i} id={`${uid}-${i}`} gradientUnits="userSpaceOnUse" x1={l.sx} x2={l.tx}>
               <stop offset="0%" style={{ stopColor: color.get(l.from) }} />
@@ -164,7 +260,7 @@ export default function SankeyDiagram({
           ))}
         </defs>
         <g transform={`translate(0,${MARGIN})`}>
-          <g fill="none" className="sankey-links">
+          <g fill="none" clipPath={`url(#${uid}-reveal)`}>
             {moved.links.map((l, i) => {
               const xm = (l.sx + l.tx) / 2;
               const key = `${l.from}>${l.to}`;
@@ -194,8 +290,12 @@ export default function SankeyDiagram({
               onPointerDown={startDrag(n.key)}
               onPointerMove={(e) => {
                 moveDrag(e);
-                show(n.key, `${n.label}: ${formatCents(n.cents)}`)(e);
+                show(
+                  n.key,
+                  `${n.label}: ${formatCents(n.cents)}${positions[n.key] ? ' · double-click to release' : ''}`,
+                )(e);
               }}
+              onDoubleClick={() => release(n.key)}
               onPointerUp={endDrag}
               onPointerCancel={endDrag}
             >

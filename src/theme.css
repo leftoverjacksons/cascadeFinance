@@ -733,21 +733,6 @@ button.sort {
   font-size: 0.8rem;
 }
 
-.sankey-links {
-  animation: sankey-in 0.6s ease-out;
-}
-
-@keyframes sankey-in {
-  from {
-    opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sankey-links {
-    animation: none;
-  }
-}
 
 .sankey-link {
   cursor: pointer;
