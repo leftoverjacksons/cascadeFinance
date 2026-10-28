@@ -3,6 +3,7 @@ import {
   initialState,
   linkKey,
   settle,
+  stackKey,
   stackOffsets,
   step,
   totalBend,
@@ -218,6 +219,27 @@ describe('sankey physics', () => {
     const a = s.bodies.get('payA')!.y;
     const b = s.bodies.get('payB')!.y;
     expect(b - a).toBeGreaterThan(300); // far apart: well beyond their computed 70
+  });
+
+  it('follows a hand-set tail order, with unlisted tails below in the automatic order', () => {
+    const w = world(
+      [
+        { key: 'src', x: 0, y: 0, height: 300, column: 0 },
+        { key: 'a', x: 200, y: 0, height: 100, column: 1 },
+        { key: 'b', x: 200, y: 200, height: 100, column: 1 },
+        { key: 'c', x: 200, y: 400, height: 100, column: 1 },
+      ],
+      [
+        { from: 'src', to: 'a', cents: 1000 },
+        { from: 'src', to: 'b', cents: 1000 },
+        { from: 'src', to: 'c', cents: 1000 },
+      ],
+    );
+    const s = start(w);
+    const offset = (to: string) => stackOffsets(w, s.bodies).get(linkKey({ from: 'src', to }))!.s;
+    expect([offset('a'), offset('b'), offset('c')]).toEqual([50, 150, 250]); // automatic: by where they go
+    w.stacks = new Map([[stackKey('src', 'out'), ['src>c']]]);
+    expect([offset('c'), offset('a'), offset('b')]).toEqual([50, 150, 250]); // c moved to the top
   });
 });
 

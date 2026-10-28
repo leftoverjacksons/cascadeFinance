@@ -1,7 +1,7 @@
 import { useIonToast } from '@ionic/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
-import SankeyDiagram, { type SankeyPositions } from '../charts/SankeyDiagram';
+import SankeyDiagram, { type SankeyPositions, type SankeyStacks } from '../charts/SankeyDiagram';
 import { buildSankey, type FlowRow, type SankeyGraph, type SankeyNode } from '../domain/flows';
 import { formatCents, formatCentsWhole } from '../domain/money';
 import { OTHER } from '../domain/summary';
@@ -28,32 +28,45 @@ function storedView(): FlowView {
 }
 
 /**
- * Saved positions: { v: 2, nodes: { key: { x, y } } }, where x and y are the
- * node's top-left as fractions of the drawing area, shared by every period.
+ * Saved layout: { v: 2, nodes: { key: { x, y } }, stacks?: { "node|out": [link, ...] } }.
+ * Nodes: where each dragged node was put (top-left), as fractions of the
+ * drawing area; stacks: tail orders set by hand. Shared by every period.
  * (Version 1 stored offsets from the computed layout; those are ignored.)
  */
-const POSITIONS_VERSION = 2;
+const LAYOUT_VERSION = 2;
 
-/** Saved positions, ignoring anything malformed or from an older version. */
-export function sanitizePositions(raw: unknown): SankeyPositions {
-  const out: SankeyPositions = {};
-  const saved = raw as { v?: unknown; nodes?: unknown } | null;
-  if (!saved || typeof saved !== 'object' || saved.v !== POSITIONS_VERSION) return out;
-  if (!saved.nodes || typeof saved.nodes !== 'object' || Array.isArray(saved.nodes)) return out;
-  for (const [key, v] of Object.entries(saved.nodes as Record<string, unknown>)) {
-    const { x, y } = (v ?? {}) as { x?: unknown; y?: unknown };
-    if (typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y)) {
-      out[key] = { x: Math.max(0, Math.min(1, x)), y: Math.max(0, Math.min(1, y)) };
+export interface SavedLayout {
+  nodes: SankeyPositions;
+  stacks: SankeyStacks;
+}
+
+/** A saved layout, ignoring anything malformed or from an older version. */
+export function sanitizeLayout(raw: unknown): SavedLayout {
+  const out: SavedLayout = { nodes: {}, stacks: {} };
+  const saved = raw as { v?: unknown; nodes?: unknown; stacks?: unknown } | null;
+  if (!saved || typeof saved !== 'object' || saved.v !== LAYOUT_VERSION) return out;
+  const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+  if (isRecord(saved.nodes)) {
+    for (const [key, v] of Object.entries(saved.nodes)) {
+      const { x, y } = (v ?? {}) as { x?: unknown; y?: unknown };
+      if (typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y)) {
+        out.nodes[key] = { x: Math.max(0, Math.min(1, x)), y: Math.max(0, Math.min(1, y)) };
+      }
+    }
+  }
+  if (isRecord(saved.stacks)) {
+    for (const [key, v] of Object.entries(saved.stacks)) {
+      if (Array.isArray(v) && v.every((x) => typeof x === 'string')) out.stacks[key] = v;
     }
   }
   return out;
 }
 
-/** This person's dragged node positions, saved to their preferences. */
-function useSavedPositions() {
+/** This person's diagram layout (dragged nodes, hand-set tail orders), saved to their preferences. */
+function useSavedLayout() {
   const { session } = useAuth();
   const userId = session!.user.id;
-  const [positions, setPositions] = useState<SankeyPositions>({});
+  const [layout, setLayout] = useState<SavedLayout>({ nodes: {}, stacks: {} });
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const [toast] = useIonToast();
 
@@ -64,28 +77,32 @@ function useSavedPositions() {
       .select('sankey_positions')
       .eq('user_id', userId)
       .maybeSingle()
-      .then(({ data }) => !cancelled && setPositions(sanitizePositions(data?.sankey_positions)));
+      .then(({ data }) => !cancelled && setLayout(sanitizeLayout(data?.sankey_positions)));
     return () => {
       cancelled = true;
     };
   }, [userId]);
   useEffect(() => () => clearTimeout(timer.current), []);
 
+  const latest = useRef(layout);
+  latest.current = layout;
   const update = useCallback(
-    (next: SankeyPositions) => {
-      setPositions(next);
+    (change: Partial<SavedLayout>) => {
+      const next = { ...latest.current, ...change };
+      latest.current = next;
+      setLayout(next);
       clearTimeout(timer.current);
       timer.current = setTimeout(async () => {
         // (A query builder only runs when awaited.)
         const { error } = await supabase
           .from('user_preferences')
-          .upsert({ user_id: userId, sankey_positions: { v: POSITIONS_VERSION, nodes: next } as unknown as Json });
-        if (error) void toast({ message: `Positions not saved: ${error.message}`, duration: 4000, color: 'danger' });
+          .upsert({ user_id: userId, sankey_positions: { v: LAYOUT_VERSION, ...next } as unknown as Json });
+        if (error) void toast({ message: `Layout not saved: ${error.message}`, duration: 4000, color: 'danger' });
       }, SAVE_DELAY_MS);
     },
     [userId, toast],
   );
-  return [positions, update] as const;
+  return [layout, update] as const;
 }
 
 /** Sankey of money in -> accounts -> other accounts / spending, for the selected period. */
@@ -95,7 +112,7 @@ export default function FlowsPanel(props: PanelProps) {
   const [rows, setRows] = useState<FlowRow[] | null>(null);
   const [showTable, setShowTable] = useState(false);
   const [view, setView] = useState<FlowView>(storedView);
-  const [positions, setPositions] = useSavedPositions();
+  const [layout, setLayout] = useSavedLayout();
   const from = model.shown[0]?.month;
   const to = model.data.today;
 
@@ -296,8 +313,10 @@ export default function FlowsPanel(props: PanelProps) {
           sideOf={sideOf}
           label="Money flow from income through accounts to spending"
           height={fill ? undefined : 460}
-          positions={positions}
-          onPositionsChange={setPositions}
+          positions={layout.nodes}
+          onPositionsChange={(nodes) => setLayout({ nodes })}
+          stacks={layout.stacks}
+          onStacksChange={(stacks) => setLayout({ stacks })}
           selected={flow?.key ?? null}
           onSelect={select}
         />

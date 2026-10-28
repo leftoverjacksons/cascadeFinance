@@ -99,6 +99,52 @@ test('transfers between accounts are linked, reviewable, and shown as money flow
   await flows.getByRole('button', { name: 'Reset layout' }).click();
   await expect.poll(async () => (await node.locator('rect').nth(1).boundingBox())!.x).toBe(before.x);
 
+  // A tail's end can be dragged up or down its node's stack; the order is saved.
+  const ends = () =>
+    flows.evaluate((panel) => {
+      const paths = [...panel.querySelectorAll<SVGPathElement>('path[data-link]')];
+      const bySource = new Map<string, SVGPathElement[]>();
+      for (const p of paths) {
+        const from = p.dataset.link!.split('>')[0];
+        bySource.set(from, [...(bySource.get(from) ?? []), p]);
+      }
+      const group = [...bySource.values()].find((g) => g.length >= 2);
+      if (!group) return []; // not drawn yet
+      return group
+        .map((p) => {
+          const pt = p.getPointAtLength(0).matrixTransform(p.getScreenCTM()!);
+          return { link: p.dataset.link!, x: pt.x, y: pt.y, w: Number(p.getAttribute('stroke-width')) };
+        })
+        .sort((a, b) => a.y - b.y);
+    });
+  await expect.poll(async () => (await ends()).length).toBeGreaterThan(1);
+  const drawn = await ends();
+  const [first, last] = [drawn[0], drawn.at(-1)!];
+  const from = { x: first.x + 15, y: first.y }; // past the node's own 6 px grab area
+  const to = { x: first.x + 15, y: last.y + last.w / 2 + 2 };
+  if (test.info().project.name === 'phone') {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [from] });
+    for (let i = 1; i <= 6; i++) {
+      await cdp.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ x: from.x, y: from.y + ((to.y - from.y) * i) / 6 }],
+      });
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  } else {
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(to.x, to.y, { steps: 6 });
+    await page.mouse.up();
+  }
+  await expect.poll(async () => (await ends()).at(-1)?.link).toBe(first.link);
+  await page.waitForTimeout(1500);
+  await page.reload();
+  await expect.poll(async () => (await ends()).at(-1)?.link).toBe(first.link);
+  await flows.getByRole('button', { name: 'Reset layout' }).click();
+  await expect.poll(async () => (await ends())[0]?.link).toBe(first.link);
+
   // Clicking a flow selects it and lists its transactions (in the Transactions
   // panel on desktop, under the diagram on phones).
   // (Dispatched on the element: flows overlap, so a click at its centre may land on another.)

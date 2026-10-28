@@ -49,7 +49,15 @@ export interface PhysicsWorld {
   /** Drawing area height, and the gap kept between nodes in a column. */
   height: number;
   gap: number;
+  /**
+   * Tail orders set by hand, top first, per node side: key stackKey(node,
+   * 'out' | 'in'). Tails not listed (e.g. new data) go below the listed ones,
+   * in the automatic order.
+   */
+  stacks?: Map<string, string[]>;
 }
+
+export const stackKey = (node: string, side: 'out' | 'in') => `${node}|${side}`;
 
 /** Where each tail sits in its nodes' stacks: centre offsets from the node tops. */
 export interface Offsets {
@@ -94,15 +102,27 @@ export function stackOffsets(world: PhysicsWorld, bodies: Map<string, Body>): Ma
     // A transfer to another account leaves from the side facing it.
     const side = (l: PhysicsLink) =>
       n.isAccount && node.get(l.to)?.isAccount ? (centre(l.to) > centre(n.key) ? 1 : -1) : 0;
+    // Hand-set order first (if any), then the automatic one.
+    const rank = (sideKey: 'out' | 'in') => {
+      const order = world.stacks?.get(stackKey(n.key, sideKey));
+      return (l: PhysicsLink) => {
+        const i = order?.indexOf(linkKey(l)) ?? -1;
+        return order ? (i >= 0 ? i : order.length) : 0;
+      };
+    };
+    const outRank = rank('out');
+    const inRank = rank('in');
     let y = 0;
     for (const l of world.links
       .filter((l) => l.from === n.key)
-      .sort((a, b) => side(a) - side(b) || centre(a.to) - centre(b.to))) {
+      .sort((a, b) => outRank(a) - outRank(b) || side(a) - side(b) || centre(a.to) - centre(b.to))) {
       out.get(linkKey(l))!.s = y + l.width / 2;
       y += l.width;
     }
     y = 0;
-    for (const l of world.links.filter((l) => l.to === n.key).sort((a, b) => centre(a.from) - centre(b.from))) {
+    for (const l of world.links
+      .filter((l) => l.to === n.key)
+      .sort((a, b) => inRank(a) - inRank(b) || centre(a.from) - centre(b.from))) {
       out.get(linkKey(l))!.t = y + l.width / 2;
       y += l.width;
     }

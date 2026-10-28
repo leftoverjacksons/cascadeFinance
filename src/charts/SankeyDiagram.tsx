@@ -2,7 +2,15 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { SankeyGraph, SankeyNode } from '../domain/flows';
 import { formatCents } from '../domain/money';
 import { placeSankey } from './sankeyLayout';
-import { initialState, linkKey, settle, step, type PhysicsState, type PhysicsWorld } from './sankeyPhysics';
+import {
+  initialState,
+  linkKey,
+  settle,
+  stackKey,
+  step,
+  type PhysicsState,
+  type PhysicsWorld,
+} from './sankeyPhysics';
 
 interface Props {
   graph: SankeyGraph;
@@ -16,18 +24,32 @@ interface Props {
   /** Where dragged nodes were put (top-left), as fractions of the drawing area's width and height. */
   positions: SankeyPositions;
   onPositionsChange: (positions: SankeyPositions) => void;
+  /** Tail orders set by hand, top first, per node side (see sankeyPhysics stackKey). */
+  stacks: SankeyStacks;
+  onStacksChange: (stacks: SankeyStacks) => void;
   /** Selected link ("from>to"): stays highlighted. */
   selected: string | null;
   onSelect: (link: string | null) => void;
 }
 
 export type SankeyPositions = Record<string, { x: number; y: number }>;
+export type SankeyStacks = Record<string, string[]>;
 
 /** Room above and below so labels on the outermost nodes are not clipped. */
 const MARGIN = 10;
 /** Gap kept between nodes in a column while they move. */
 const GAP = 6;
 const REVEAL_MS = 1100;
+/** How close to a tail's end (px along it) a press grabs that end to reorder it. */
+const END_GRAB = 30;
+
+interface TailDrag {
+  link: string;
+  node: string;
+  side: 'out' | 'in';
+  startY: number;
+  moved: boolean;
+}
 
 const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
@@ -65,6 +87,8 @@ export default function SankeyDiagram({
   height,
   positions,
   onPositionsChange,
+  stacks,
+  onStacksChange,
   selected,
   onSelect,
 }: Props) {
@@ -72,6 +96,10 @@ export default function SankeyDiagram({
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [hover, setHover] = useState<Hover | null>(null);
   const drag = useRef<Drag | null>(null);
+  const tailDrag = useRef<TailDrag | null>(null);
+  const suppressClick = useRef(false);
+  // Where each tail starts and ends (x), for telling an end-grab from a click.
+  const linkEnds = useRef(new Map<string, { sx: number; tx: number }>());
   const uid = useId().replace(/:/g, '');
 
   useEffect(() => {
@@ -86,7 +114,12 @@ export default function SankeyDiagram({
     // (CSS touch-action is not honoured on SVG children, and React's touch
     // listeners are passive, so this needs a native non-passive listener.)
     const onTouchStart = (e: TouchEvent) => {
-      if ((e.target as Element).closest('.sankey-node')) e.preventDefault();
+      const target = e.target as Element;
+      if (target.closest('.sankey-node')) e.preventDefault();
+      // Likewise a touch on a tail's end reorders it.
+      const ends = linkEnds.current.get(target.closest('[data-link]')?.getAttribute('data-link') ?? '');
+      const x = e.touches[0].clientX - el.getBoundingClientRect().left;
+      if (ends && Math.min(Math.abs(x - ends.sx), Math.abs(x - ends.tx)) <= END_GRAB) e.preventDefault();
     };
     el.addEventListener('touchstart', onTouchStart, { passive: false });
     return () => {
@@ -128,9 +161,10 @@ export default function SankeyDiagram({
       ),
       height: area.height,
       gap: GAP,
+      stacks: new Map(Object.entries(stacks)),
     };
     // (area is derived from size)
-  }, [placed, positions, size, sideOf]);
+  }, [placed, positions, size, sideOf, stacks]);
   const state = useRef<PhysicsState>({ bodies: new Map(), offsets: new Map() });
   const worldRef = useRef(world);
   worldRef.current = world;
@@ -255,6 +289,55 @@ export default function SankeyDiagram({
     drag.current = null;
     run();
   };
+  // ── Reordering a tail within a node's stack ──
+  const endAt = (key: string, e: React.PointerEvent): 'out' | 'in' | null => {
+    const ends = linkEnds.current.get(key);
+    if (!ends) return null;
+    const x = e.clientX - box.current!.getBoundingClientRect().left;
+    const ds = Math.abs(x - ends.sx);
+    const dt = Math.abs(x - ends.tx);
+    return Math.min(ds, dt) > END_GRAB ? null : ds <= dt ? 'out' : 'in';
+  };
+  const startTailDrag = (l: { from: string; to: string }) => (e: React.PointerEvent) => {
+    const side = endAt(linkKey(l), e);
+    if (!side) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    tailDrag.current = { link: linkKey(l), node: side === 'out' ? l.from : l.to, side, startY: e.clientY, moved: false };
+  };
+  const moveTailDrag = (e: React.PointerEvent) => {
+    const t = tailDrag.current;
+    if (!t) return;
+    if (!t.moved && Math.abs(e.clientY - t.startY) < 4) return;
+    t.moved = true;
+    const body = state.current.bodies.get(t.node);
+    if (!body) return;
+    // The node's other tails, top to bottom as they are now; the dragged one goes
+    // in front of the first whose centre is below the pointer.
+    const y = e.clientY - box.current!.getBoundingClientRect().top - MARGIN;
+    const end = (l: { from: string; to: string }) => state.current.offsets.get(linkKey(l))?.[t.side === 'out' ? 's' : 't'] ?? 0;
+    const others = placed.links
+      .filter((l) => (t.side === 'out' ? l.from : l.to) === t.node && linkKey(l) !== t.link)
+      .sort((a, b) => end(a) - end(b));
+    const at = others.filter((l) => body.y + end(l) < y).length;
+    const order = others.map(linkKey);
+    order.splice(at, 0, t.link);
+    const k = stackKey(t.node, t.side);
+    if (stacks[k]?.join() !== order.join()) onStacksChange({ ...stacks, [k]: order });
+    run();
+  };
+  const endTailDrag = () => {
+    if (tailDrag.current?.moved) suppressClick.current = true; // a drag is not a click
+    tailDrag.current = null;
+  };
+  const autoStack = (l: { from: string; to: string }) => (e: React.MouseEvent) => {
+    const side = endAt(linkKey(l), e as unknown as React.PointerEvent);
+    const k = side && stackKey(side === 'out' ? l.from : l.to, side);
+    if (!k || !stacks[k]) return;
+    const rest = { ...stacks };
+    delete rest[k];
+    onStacksChange(rest);
+  };
+
   const release = (key: string) => {
     if (!positions[key]) return;
     const rest = { ...positions };
@@ -269,8 +352,14 @@ export default function SankeyDiagram({
       style={{ height: height ?? '100%', position: 'relative' }}
       onPointerLeave={() => setHover(null)}
     >
-      {Object.keys(positions).length > 0 && (
-        <button className="link-like sankey-reset" onClick={() => onPositionsChange({})}>
+      {(Object.keys(positions).length > 0 || Object.keys(stacks).length > 0) && (
+        <button
+          className="link-like sankey-reset"
+          onClick={() => {
+            onPositionsChange({});
+            onStacksChange({});
+          }}
+        >
           Reset layout
         </button>
       )}
@@ -300,11 +389,26 @@ export default function SankeyDiagram({
                   stroke={`url(#${uid}-${i})`}
                   strokeWidth={Math.max(1, l.width)}
                   strokeOpacity={key === selected ? 0.7 : lit(l.from, l.to) ? 0.45 : 0.12}
-                  onClick={() => onSelect(key === selected ? null : key)}
-                  onPointerMove={show(
-                    `${l.from}>${l.to}`,
-                    `${labelOf(l.from)} → ${labelOf(l.to)}: ${formatCents(l.cents)}`,
-                  )}
+                  ref={() => linkEnds.current.set(key, { sx: l.sx, tx: l.tx })}
+                  onClick={() => {
+                    if (suppressClick.current) suppressClick.current = false;
+                    else onSelect(key === selected ? null : key);
+                  }}
+                  onDoubleClick={autoStack(l)}
+                  onPointerDown={startTailDrag(l)}
+                  onPointerUp={endTailDrag}
+                  onPointerCancel={endTailDrag}
+                  onPointerMove={(e) => {
+                    moveTailDrag(e);
+                    // Near an end, the cursor shows the tail can be moved up and down its stack.
+                    e.currentTarget.style.cursor = tailDrag.current || endAt(key, e) ? 'ns-resize' : 'pointer';
+                    if (!tailDrag.current) {
+                      show(
+                        key,
+                        `${labelOf(l.from)} → ${labelOf(l.to)}: ${formatCents(l.cents)} · drag an end to reorder`,
+                      )(e);
+                    }
+                  }}
                 />
               );
             })}
