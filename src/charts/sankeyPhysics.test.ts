@@ -162,5 +162,62 @@ describe('sankey physics', () => {
     // A 100-high chain in a 600-high area: centred at 250.
     expect(s.bodies.get('a')!.y).toBeCloseTo(250, 0);
   });
+
+  it('pushes placed nodes apart too: they never overlap', () => {
+    const w = world(
+      [
+        { key: 'src', x: 0, y: 0, height: 100, column: 0 },
+        { key: 'p', x: 200, y: 0, height: 100, column: 1 },
+        { key: 'q', x: 200, y: 300, height: 100, column: 1 },
+      ],
+      [
+        { from: 'src', to: 'p', cents: 1000 },
+        { from: 'src', to: 'q', cents: 1000 },
+      ],
+      // Both placed at the same spot.
+      new Map([
+        ['p', { x: 200, y: 200 }],
+        ['q', { x: 200, y: 200 }],
+      ]),
+    );
+    const s = start(w);
+    settle(w, s, 2000);
+    const [p, q] = [s.bodies.get('p')!.y, s.bodies.get('q')!.y].sort((x, y) => x - y);
+    expect(q - p).toBeGreaterThanOrEqual(100 + 10 - 0.5);
+  });
+
+  it('a held node cannot be pushed; the others make room around it', () => {
+    const w = world(
+      [
+        { key: 'p', x: 200, y: 0, height: 100, column: 1 },
+        { key: 'q', x: 200, y: 300, height: 100, column: 1 },
+      ],
+      [],
+    );
+    const s = start(w);
+    s.bodies.get('q')!.y = 20; // dragged onto p
+    for (let i = 0; i < 300; i++) step(w, s, 'q');
+    expect(s.bodies.get('q')!.y).toBe(20);
+    expect(s.bodies.get('p')!.y).toBeGreaterThanOrEqual(20 + 100 + 10 - 0.5);
+  });
+
+  it("pulls each side's trunk toward its own edge", () => {
+    const w = world(
+      [
+        { key: 'payA', x: 0, y: 250, height: 50, column: 0, side: -1 },
+        { key: 'payB', x: 0, y: 320, height: 50, column: 0, side: 1 },
+        { key: 'food', x: 200, y: 260, height: 100, column: 1 },
+      ],
+      [
+        { from: 'payA', to: 'food', cents: 500 },
+        { from: 'payB', to: 'food', cents: 500 },
+      ],
+    );
+    const s = start(w);
+    settle(w, s, 2000);
+    const a = s.bodies.get('payA')!.y;
+    const b = s.bodies.get('payB')!.y;
+    expect(b - a).toBeGreaterThan(300); // far apart: well beyond their computed 70
+  });
 });
 

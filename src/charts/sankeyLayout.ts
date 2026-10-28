@@ -30,6 +30,7 @@ export interface SankeyLayoutOptions {
 }
 
 const ITERATIONS = 24;
+const SIXTHS = 6;
 
 /**
  * Positions nodes and links for drawing.
@@ -128,7 +129,11 @@ export function placeSankey(
     }
   }
 
-  const x0 = (k: string) => (last === 0 ? 0 : (column(k) * (width - nodeWidth)) / last);
+  // Columns at fixed sixths of the width: money in at the left edge, accounts at
+  // 1/6, 2/6, 3/6…, destinations at the right edge, so flows into the last
+  // column have a long, gentle run. (More columns than fit: spread evenly.)
+  const step = last <= SIXTHS ? 1 / SIXTHS : 1 / last;
+  const x0 = (k: string) => (column(k) === last ? 1 : column(k) * step) * (width - nodeWidth);
   const isAccount = new Set(graph.nodes.filter((n) => n.role === 'account').map((n) => n.key));
 
   // Stack links within each node.

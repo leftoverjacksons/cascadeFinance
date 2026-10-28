@@ -26,6 +26,11 @@ export interface PhysicsNode {
   column: number;
   /** Accounts send transfers to other accounts from the side facing them. */
   isAccount?: boolean;
+  /**
+   * Edge this node's trunk belongs to: -1 top, 1 bottom (e.g. each person's
+   * income and accounts on their own side), 0 or undefined none.
+   */
+  side?: -1 | 0 | 1;
 }
 
 export interface PhysicsLink {
@@ -59,6 +64,8 @@ export interface PhysicsState {
 
 /** Weight of the spring to the computed layout, relative to a node's tails. */
 export const ANCHOR = 0.05;
+/** Weight of the pull toward a node's side (see PhysicsNode.side), relative to its tails. */
+export const SIDE_PULL = 2;
 const STIFFNESS = 0.14;
 const DAMPING = 0.76;
 /** Share of the remaining distance a tail slides each frame. */
@@ -103,11 +110,24 @@ export function stackOffsets(world: PhysicsWorld, bodies: Map<string, Body>): Ma
   return out;
 }
 
-/** Where each node would rest given where everything is now. */
-export function restingPlaces(world: PhysicsWorld, state: PhysicsState): Map<string, { x: number; y: number }> {
+/**
+ * Where each node would rest given where everything is now. `held` (the node
+ * being dragged) is the only node that cannot be pushed aside; placed nodes
+ * rest where they were put unless that would overlap another node.
+ */
+export function restingPlaces(
+  world: PhysicsWorld,
+  state: PhysicsState,
+  held: string | null = null,
+): Map<string, { x: number; y: number }> {
   const { bodies, offsets } = state;
   const rest = new Map<string, { x: number; y: number }>();
   for (const n of world.nodes) {
+    if (n.key === held) {
+      const b = bodies.get(n.key)!;
+      rest.set(n.key, { x: b.x, y: b.y });
+      continue;
+    }
     const pin = world.pinned.get(n.key);
     if (pin) {
       rest.set(n.key, { ...pin });
@@ -125,33 +145,52 @@ export function restingPlaces(world: PhysicsWorld, state: PhysicsState): Map<str
       weight += l.cents;
     }
     const anchor = ANCHOR * (weight || 1);
-    rest.set(n.key, { x: n.x, y: (sum + anchor * n.y) / (weight + anchor) });
+    sum += anchor * n.y;
+    weight += anchor;
+    if (n.side) {
+      const pull = SIDE_PULL * (weight - anchor || 1);
+      sum += pull * (n.side < 0 ? 0 : world.height - n.height);
+      weight += pull;
+    }
+    rest.set(n.key, { x: n.x, y: sum / weight });
   }
 
-  // Keep nodes in a column apart and inside the area; they may change order.
+  // Keep nodes in a column apart and inside the area (they repel each other,
+  // placed ones included); they may change order.
+  const fixed = (key: string) => key === held;
   const columns = new Map<number, PhysicsNode[]>();
   for (const n of world.nodes) columns.set(n.column, [...(columns.get(n.column) ?? []), n]);
   for (const nodes of columns.values()) {
-    const sorted = [...nodes].sort(
-      (a, b) => rest.get(a.key)!.y + a.height / 2 - (rest.get(b.key)!.y + b.height / 2),
-    );
+    const centre = (n: PhysicsNode) => rest.get(n.key)!.y + n.height / 2;
+    let sorted = [...nodes].sort((a, b) => centre(a) - centre(b));
+    const h = nodes.find((n) => fixed(n.key));
+    if (h) {
+      // Around the held node: whatever doesn't fit on one side goes to the other.
+      const above = sorted.filter((n) => n !== h && centre(n) < centre(h));
+      const below = sorted.filter((n) => n !== h && centre(n) >= centre(h));
+      const room = (list: PhysicsNode[]) => list.reduce((t, n) => t + n.height + world.gap, 0);
+      const hy = rest.get(h.key)!.y;
+      while (above.length && room(above) > hy) below.unshift(above.pop()!);
+      while (below.length && room(below) > world.height - hy - h.height) above.push(below.shift()!);
+      sorted = [...above, h, ...below];
+    }
     let top = 0;
     for (const n of sorted) {
       const r = rest.get(n.key)!;
-      if (!world.pinned.has(n.key)) r.y = Math.max(r.y, top);
+      if (!fixed(n.key)) r.y = Math.max(r.y, top);
       top = r.y + n.height + world.gap;
     }
     let bottom = world.height;
     for (const n of [...sorted].reverse()) {
       const r = rest.get(n.key)!;
-      if (!world.pinned.has(n.key)) r.y = Math.max(0, Math.min(r.y, bottom - n.height));
+      if (!fixed(n.key)) r.y = Math.max(0, Math.min(r.y, bottom - n.height));
       bottom = r.y - world.gap;
     }
   }
 
   // Levelling tails is indifferent to shifting everything up or down, so the
   // picture can drift to an edge. Unless pins hold it, keep it centred.
-  if (world.pinned.size === 0 && world.nodes.length) {
+  if (world.pinned.size === 0 && !held && world.nodes.length) {
     const top = Math.min(...world.nodes.map((n) => rest.get(n.key)!.y));
     const bottom = Math.max(...world.nodes.map((n) => rest.get(n.key)!.y + n.height));
     const shift = (world.height - top - bottom) / 2;
@@ -184,7 +223,7 @@ export function step(world: PhysicsWorld, state: PhysicsState, held: string | nu
     offsets.set(key, o);
   }
 
-  const rest = restingPlaces(world, state);
+  const rest = restingPlaces(world, state, held);
   for (const n of world.nodes) {
     const target = rest.get(n.key)!;
     const b = bodies.get(n.key)!;

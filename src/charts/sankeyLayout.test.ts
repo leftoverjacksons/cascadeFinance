@@ -53,4 +53,14 @@ describe('placeSankey', () => {
   it('returns nothing for an empty graph', () => {
     expect(placeSankey({ nodes: [], links: [] }, { width: 100, height: 100 })).toEqual({ nodes: [], links: [] });
   });
+
+  it('puts columns at sixths of the width, destinations at the right edge', () => {
+    // Columns: money in 0, checkings 1, savings 2, destinations last.
+    const xs = (k: string) => node(k).x0;
+    expect(xs('in:pay')).toBe(0);
+    expect(xs('acct:cc')).toBeCloseTo((1000 - 8) / 6, 5);
+    expect(xs('acct:cs')).toBeCloseTo((2 * (1000 - 8)) / 6, 5);
+    expect(xs('spend:house')).toBeCloseTo(1000 - 8, 5);
+  });
 });
+

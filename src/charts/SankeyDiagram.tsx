@@ -8,6 +8,8 @@ interface Props {
   graph: SankeyGraph;
   /** CSS colour (e.g. a var(--series-n) reference) for each node. */
   colorOf: (node: SankeyNode) => string;
+  /** Edge a node's trunk is pulled toward: -1 top, 1 bottom, 0 none (see sankeyPhysics). */
+  sideOf?: (node: SankeyNode) => -1 | 0 | 1;
   label: string;
   /** Fixed height in px; omit to fill the parent (e.g. a resizable panel). */
   height?: number;
@@ -58,6 +60,7 @@ interface Drag {
 export default function SankeyDiagram({
   graph,
   colorOf,
+  sideOf,
   label,
   height,
   positions,
@@ -109,6 +112,7 @@ export default function SankeyDiagram({
         height: n.y1 - n.y0,
         column: columns.indexOf(Math.round(n.x0)),
         isAccount: n.role === 'account',
+        side: sideOf?.(n),
       })),
       links: placed.links,
       pinned: new Map(
@@ -126,7 +130,7 @@ export default function SankeyDiagram({
       gap: GAP,
     };
     // (area is derived from size)
-  }, [placed, positions, size]);
+  }, [placed, positions, size, sideOf]);
   const state = useRef<PhysicsState>({ bodies: new Map(), offsets: new Map() });
   const worldRef = useRef(world);
   worldRef.current = world;
@@ -207,6 +211,16 @@ export default function SankeyDiagram({
 
   const color = useMemo(() => new Map(graph.nodes.map((n) => [n.key, colorOf(n)])), [graph, colorOf]);
   const labelOf = (key: string) => graph.nodes.find((n) => n.key === key)?.label ?? key;
+  // Share of all spending, for spending nodes' tooltips.
+  const spending = useMemo(
+    () => new Map(graph.nodes.filter((n) => n.role === 'spend').map((n) => [n.key, n])),
+    [graph],
+  );
+  const totalSpending = graph.links.reduce((t, l) => t + (spending.has(l.to) ? l.cents : 0), 0);
+  const nodeText = (n: { key: string; label: string; cents: number }) =>
+    `${n.label}: ${formatCents(n.cents)}` +
+    (spending.has(n.key) && totalSpending ? ` · ${percent(n.cents / totalSpending)} of spending` : '') +
+    (positions[n.key] ? ' · double-click to release' : '');
 
   const show = (key: string, text: string) => (e: React.PointerEvent) => {
     if (drag.current) return;
@@ -303,10 +317,7 @@ export default function SankeyDiagram({
               onPointerDown={startDrag(n.key)}
               onPointerMove={(e) => {
                 moveDrag(e);
-                show(
-                  n.key,
-                  `${n.label}: ${formatCents(n.cents)}${positions[n.key] ? ' · double-click to release' : ''}`,
-                )(e);
+                show(n.key, nodeText(n))(e);
               }}
               onDoubleClick={() => release(n.key)}
               onPointerUp={endDrag}
@@ -357,4 +368,9 @@ export default function SankeyDiagram({
 
 function clamp(v: number, min: number, max: number) {
   return Math.min(max, Math.max(min, v));
+}
+
+/** 0.234 -> "23%"; under 1% -> "<1%". */
+function percent(share: number) {
+  return share > 0 && share < 0.01 ? '<1%' : `${Math.round(share * 100)}%`;
 }

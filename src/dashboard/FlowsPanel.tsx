@@ -156,30 +156,49 @@ export default function FlowsPanel(props: PanelProps) {
   const hidden = (graph?.links.length ?? 0) - drawn.length;
 
   const drawnGraph = useMemo(() => (graph ? { ...graph, links: drawn } : null), [graph, drawn]);
-  // Colour: spending by category (as on the spending chart); accounts by whose
-  // they are; money in by whose account it mostly lands in; the rest neutral.
+  // Whose an account or money-in node is: 0 or 1 (household member order), or
+  // undefined (joint, or not a person's). Money in belongs to whoever's account
+  // it mostly lands in.
+  const personIndex = useCallback(
+    (n: SankeyNode): number | undefined => {
+      const ofAccount = (key: string) => {
+        const id = key.slice('acct:'.length);
+        const person = view === 'people' ? id : personOf.get(id);
+        const i = members.findIndex((m) => m.user_id === person);
+        return i === 0 || i === 1 ? i : undefined;
+      };
+      if (n.role === 'account') return ofAccount(n.key);
+      if (n.role === 'income' || n.key.startsWith('tin:')) {
+        const main = (graph?.links ?? []).filter((l) => l.from === n.key).sort((a, b) => b.cents - a.cents)[0];
+        return main ? ofAccount(main.to) : undefined;
+      }
+      return undefined;
+    },
+    [members, view, personOf, graph],
+  );
+  // Colour: spending by category (as on the spending chart); accounts and money
+  // in by person (joint neutral); the rest neutral.
   const colorOf = useCallback(
     (n: SankeyNode) => {
-      const personColor = (person: string | undefined) => {
-        const i = members.findIndex((m) => m.user_id === person);
-        return i === 0 || i === 1 ? `var(--person-${i + 1})` : 'var(--person-joint)';
-      };
-      const personOfNode = (key: string) => {
-        const id = key.slice('acct:'.length);
-        return view === 'people' ? id : personOf.get(id);
-      };
       if (n.role === 'spend') {
         const i = model.series.indexOf(n.group!);
         return n.group === OTHER || i < 0 ? 'var(--series-other)' : `var(--series-${i + 1})`;
       }
-      if (n.role === 'account') return personColor(personOfNode(n.key));
-      if (n.role === 'income' || n.key.startsWith('tin:')) {
-        const main = (graph?.links ?? []).filter((l) => l.from === n.key).sort((a, b) => b.cents - a.cents)[0];
-        return main ? personColor(personOfNode(main.to)) : 'var(--person-joint)';
+      if (n.role === 'account' || n.role === 'income' || n.key.startsWith('tin:')) {
+        const i = personIndex(n);
+        return i === undefined ? 'var(--person-joint)' : `var(--person-${i + 1})`;
       }
       return 'var(--series-other)'; // transfers out of the household's accounts
     },
-    [model.series, members, view, personOf, graph],
+    [model.series, personIndex],
+  );
+  // Each person's trunk (money in and accounts) keeps to their own edge.
+  const sideOf = useCallback(
+    (n: SankeyNode): -1 | 0 | 1 => {
+      const i = personIndex(n);
+      return i === 0 ? -1 : i === 1 ? 1 : 0;
+    },
+    [personIndex],
   );
 
   const select = useCallback(
@@ -274,6 +293,7 @@ export default function FlowsPanel(props: PanelProps) {
         <SankeyDiagram
           graph={drawnGraph!}
           colorOf={colorOf}
+          sideOf={sideOf}
           label="Money flow from income through accounts to spending"
           height={fill ? undefined : 460}
           positions={positions}
