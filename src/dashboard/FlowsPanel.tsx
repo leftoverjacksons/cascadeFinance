@@ -5,6 +5,7 @@ import SankeyDiagram, { type SankeyPositions } from '../charts/SankeyDiagram';
 import { buildSankey, type FlowRow, type SankeyGraph, type SankeyNode } from '../domain/flows';
 import { formatCents, formatCentsWhole } from '../domain/money';
 import { OTHER } from '../domain/summary';
+import { useRequiredHousehold } from '../household/HouseholdProvider';
 import type { Json } from '../lib/database.types';
 import { supabase } from '../lib/supabase';
 import type { PanelProps } from './panels';
@@ -13,6 +14,18 @@ import TransactionsPanel from './TransactionsPanel';
 /** Flows below this share of the largest node are left out of the diagram (kept in the table). */
 const MIN_SHARE = 0.003;
 const SAVE_DELAY_MS = 800;
+const JOINT = 'joint';
+const VIEW_KEY = 'cascade.flows.view';
+
+type FlowView = 'accounts' | 'people';
+
+function storedView(): FlowView {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'people' ? 'people' : 'accounts';
+  } catch {
+    return 'accounts';
+  }
+}
 
 /** Saved positions, ignoring anything malformed. */
 export function sanitizePositions(raw: unknown): SankeyPositions {
@@ -69,8 +82,10 @@ function useSavedPositions() {
 /** Sankey of money in -> accounts -> other accounts / spending, for the selected period. */
 export default function FlowsPanel(props: PanelProps) {
   const { model, fill, flow, onFlow, transactionsShown } = props;
+  const { members } = useRequiredHousehold();
   const [rows, setRows] = useState<FlowRow[] | null>(null);
   const [showTable, setShowTable] = useState(false);
+  const [view, setView] = useState<FlowView>(storedView);
   const [positions, setPositions] = useSavedPositions();
   const from = model.shown[0]?.month;
   const to = model.data.today;
@@ -92,15 +107,33 @@ export default function FlowsPanel(props: PanelProps) {
     // model.data changes whenever the dashboard refreshes (e.g. after recategorising).
   }, [from, to, model.data]);
 
+  // Whose each account is: its owner, or joint.
+  const personOf = useMemo(
+    () => new Map(model.accounts.map((a) => [a.id, a.owner_user_id ?? JOINT])),
+    [model.accounts],
+  );
   const graph: SankeyGraph | null = useMemo(() => {
     if (!rows) return null;
     const accounts = new Map(model.accounts.map((a) => [a.id, a.name]));
+    const people = new Map<string, string>(members.map((m) => [m.user_id, m.display_name]));
+    people.set(JOINT, 'Joint');
     return buildSankey(rows, {
-      account: (id) => accounts.get(id) ?? 'Account',
+      account: (id) => (view === 'people' ? people.get(id) : accounts.get(id)) ?? 'Account',
       category: (id) => model.byId.get(id)?.name ?? 'Category',
       series: model.series,
+      accountGroup: view === 'people' ? (id) => personOf.get(id) ?? JOINT : undefined,
     });
-  }, [rows, model.accounts, model.byId, model.series]);
+  }, [rows, model.accounts, model.byId, model.series, members, view, personOf]);
+
+  function changeView(next: FlowView) {
+    setView(next);
+    onFlow(null); // flows differ between the views
+    try {
+      localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      // Private browsing: the view just isn't remembered.
+    }
+  }
 
   const largest = useMemo(() => {
     const totals = new Map<string, number>();
@@ -114,16 +147,30 @@ export default function FlowsPanel(props: PanelProps) {
   const hidden = (graph?.links.length ?? 0) - drawn.length;
 
   const drawnGraph = useMemo(() => (graph ? { ...graph, links: drawn } : null), [graph, drawn]);
+  // Colour: spending by category (as on the spending chart); accounts by whose
+  // they are; money in by whose account it mostly lands in; the rest neutral.
   const colorOf = useCallback(
     (n: SankeyNode) => {
+      const personColor = (person: string | undefined) => {
+        const i = members.findIndex((m) => m.user_id === person);
+        return i === 0 || i === 1 ? `var(--person-${i + 1})` : 'var(--person-joint)';
+      };
+      const personOfNode = (key: string) => {
+        const id = key.slice('acct:'.length);
+        return view === 'people' ? id : personOf.get(id);
+      };
       if (n.role === 'spend') {
         const i = model.series.indexOf(n.group!);
         return n.group === OTHER || i < 0 ? 'var(--series-other)' : `var(--series-${i + 1})`;
       }
-      if (n.role === 'transfer') return 'var(--series-other)';
-      return 'var(--chart-text)'; // income sources and accounts: neutral
+      if (n.role === 'account') return personColor(personOfNode(n.key));
+      if (n.role === 'income' || n.key.startsWith('tin:')) {
+        const main = (graph?.links ?? []).filter((l) => l.from === n.key).sort((a, b) => b.cents - a.cents)[0];
+        return main ? personColor(personOfNode(main.to)) : 'var(--person-joint)';
+      }
+      return 'var(--series-other)'; // transfers out of the household's accounts
     },
-    [model.series],
+    [model.series, members, view, personOf, graph],
   );
 
   const select = useCallback(
@@ -150,6 +197,23 @@ export default function FlowsPanel(props: PanelProps) {
   return (
     <div className="flows">
       <div className="flows-toggle">
+        <span className="flows-legend" aria-label="Colours">
+          {[...members.slice(0, 2).map((m, i) => [m.display_name, `var(--person-${i + 1})`]), ['Joint', 'var(--person-joint)']].map(
+            ([name, c]) => (
+              <span key={name}>
+                <i style={{ background: c }} />
+                {name}
+              </span>
+            ),
+          )}
+        </span>
+        <span className="flows-view" role="group" aria-label="Show">
+          {(['accounts', 'people'] as const).map((v) => (
+            <button key={v} className="link-like" aria-pressed={view === v} onClick={() => changeView(v)}>
+              {v === 'accounts' ? 'Accounts' : 'People'}
+            </button>
+          ))}
+        </span>
         {hidden > 0 && !showTable && (
           <span className="flows-note">
             {hidden} small flow{hidden === 1 ? '' : 's'} not drawn ·{' '}

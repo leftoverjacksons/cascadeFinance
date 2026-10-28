@@ -159,3 +159,30 @@ describe('rowsByLink', () => {
     expect(g.rowsByLink!.get('acct:chk>acct:jnt')).toEqual([rows[4], rows[5]]);
   });
 });
+
+describe('accountGroup (people view)', () => {
+  const owner: Record<string, string> = { chk: 'travis', sav: 'travis', cc: 'caitlin', jnt: 'joint' };
+  const rows: FlowRow[] = [
+    { kind: 'income', source: 'pay', target: 'chk', cents: 500000 },
+    { kind: 'transfer', source: 'chk', target: 'sav', cents: 100000 },
+    { kind: 'transfer', source: 'chk', target: 'jnt', cents: 50000 },
+    { kind: 'spend', source: 'sav', target: 'food', cents: 30000 },
+    { kind: 'spend', source: 'chk', target: 'food', cents: 20000 },
+  ];
+  const g = buildSankey(rows, { ...names, account: (id) => id, accountGroup: (id) => owner[id] ?? id });
+
+  it('merges accounts into one node per group', () => {
+    expect(g.nodes.filter((n) => n.role === 'account').map((n) => n.key).sort()).toEqual(['acct:joint', 'acct:travis']);
+    expect(g.links.find((l) => l.from === 'acct:travis' && l.to === 'spend:food')?.cents).toBe(50000);
+  });
+
+  it('leaves out transfers within a group, keeps those between groups', () => {
+    expect(g.links.some((l) => l.from === 'acct:travis' && l.to === 'acct:travis')).toBe(false);
+    expect(g.links.find((l) => l.to === 'acct:joint')?.cents).toBe(50000);
+  });
+
+  it('still lists the original rows behind a merged flow', () => {
+    expect(g.rowsByLink!.get('acct:travis>spend:food')).toEqual([rows[3], rows[4]]);
+  });
+});
+

@@ -110,6 +110,12 @@ test('transfers between accounts are linked, reviewable, and shown as money flow
   await expect(list.getByTestId('transactions-panel')).not.toContainText('Kroger');
   await list.getByRole('button', { name: 'Show all' }).click();
   await expect(flows.getByTestId('flow-selection')).toHaveCount(0);
+  // People view: accounts merge by owner (both accounts here are unowned, so joint).
+  await flows.getByRole('button', { name: 'People' }).click();
+  await expect(flows.getByTestId('sankey')).not.toContainText('Main Checking');
+  await expect(flows.getByTestId('sankey')).toContainText('Joint');
+  await flows.getByRole('button', { name: 'Accounts' }).click();
+  await expect(flows.getByTestId('sankey')).toContainText('Main Checking');
   await flows.getByRole('button', { name: 'Show as table' }).click();
   const table = flows.getByTestId('flows-table');
   await expect(table.locator('tr', { hasText: 'Joint' }).filter({ hasText: 'Main Checking' })).toContainText('$1,000');

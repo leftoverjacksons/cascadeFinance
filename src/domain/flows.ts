@@ -45,6 +45,12 @@ export interface FlowNames {
   category: (id: string) => string;
   /** Spending series as on the spending chart; groups not in it fold into OTHER. */
   series: string[];
+  /**
+   * Optional: merge accounts into one node per group (e.g. per person). Returns
+   * the account's group id, which account() then labels. Transfers within a
+   * group are left out.
+   */
+  accountGroup?: (accountId: string) => string;
 }
 
 function addTo(map: Map<string, number>, key: string, cents: number) {
@@ -118,7 +124,10 @@ export function buildSankey(rows: FlowRow[], names: FlowNames): SankeyGraph {
     if (!nodes.has(key)) nodes.set(key, { key, label, role, group });
     return key;
   };
-  const acct = (id: string) => node(`acct:${id}`, names.account(id), 'account');
+  const acct = (id: string) => {
+    const group = names.accountGroup?.(id) ?? id;
+    return node(`acct:${group}`, names.account(group), 'account');
+  };
   const linkTotals = new Map<string, number>();
   const transfers: SankeyLink[] = [];
   // Each row's link before tidying (transfers: the account pair, either direction).
@@ -147,6 +156,7 @@ export function buildSankey(rows: FlowRow[], names: FlowNames): SankeyGraph {
         break;
       }
       case 'transfer':
+        if (acct(r.source) === acct(r.target)) break; // between accounts of one group
         transfers.push({ from: acct(r.source), to: acct(r.target), cents: r.cents });
         rowLinks.push([r, acct(r.source), acct(r.target)]);
         break;

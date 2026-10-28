@@ -121,6 +121,12 @@ ion-item.skipped {
   --series-6: #008300;
   --series-7: #6250d6;
   --series-other: #a3a29c;
+  /* People on the money-flow diagram: teal and purple sit in the hue gaps
+     between the spending colours (validated against them and each other with
+     the dataviz validator; nodes are always labelled). Joint is neutral. */
+  --person-1: #0fadc9;
+  --person-2: #6a3f86;
+  --person-joint: #a3a29c;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -136,6 +142,9 @@ ion-item.skipped {
     --series-6: #008300;
     --series-7: #9085e9;
     --series-other: #6f6e69;
+    --person-1: #2695ac;
+    --person-2: #79459b;
+    --person-joint: #8a8982;
   }
 }
 
@@ -744,4 +753,37 @@ button.sort {
   align-items: baseline;
   font-size: 0.85rem;
   margin: 4px 0;
+}
+
+.flows-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  justify-content: flex-end;
+  align-items: baseline;
+}
+
+.flows-legend {
+  margin-right: auto;
+  display: inline-flex;
+  gap: 10px;
+  color: var(--chart-text);
+}
+
+.flows-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+
+.flows-view button[aria-pressed='true'] {
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.flows-view button + button {
+  margin-left: 8px;
 }
