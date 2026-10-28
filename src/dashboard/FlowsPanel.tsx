@@ -2,7 +2,7 @@ import { Chart, type ChartConfiguration } from 'chart.js';
 import { Flow, SankeyController } from 'chartjs-chart-sankey';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ChartCanvas, { type ChartColors } from '../charts/ChartCanvas';
-import { buildSankey, type FlowRow, type SankeyGraph, type SankeyNode } from '../domain/flows';
+import { buildSankey, layoutSankey, type FlowRow, type SankeyGraph, type SankeyNode } from '../domain/flows';
 import { formatCents, formatCentsWhole } from '../domain/money';
 import { OTHER } from '../domain/summary';
 import { supabase } from '../lib/supabase';
@@ -56,6 +56,7 @@ export default function FlowsPanel({ model, fill }: PanelProps) {
   const config = useCallback(
     (c: ChartColors): ChartConfiguration => {
       const g = { ...graph!, links: drawn };
+      const { column, priority } = layoutSankey(g);
       const byKey = new Map(g.nodes.map((n) => [n.key, n]));
       const colorOf = (n: SankeyNode | undefined) => {
         if (!n) return c.other;
@@ -74,6 +75,8 @@ export default function FlowsPanel({ model, fill }: PanelProps) {
               label: 'Money flow',
               data: g.links.map((l) => ({ from: l.from, to: l.to, flow: l.cents / 100 })),
               labels: Object.fromEntries(g.nodes.map((n) => [n.key, n.label])),
+              column,
+              priority,
               colorFrom: (ctx: { raw: { from: string } }) => colorOf(byKey.get(ctx.raw.from)),
               colorTo: (ctx: { raw: { to: string } }) => colorOf(byKey.get(ctx.raw.to)),
               colorMode: 'gradient',

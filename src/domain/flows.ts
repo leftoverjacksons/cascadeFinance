@@ -151,12 +151,168 @@ export function buildSankey(rows: FlowRow[], names: FlowNames): SankeyGraph {
     }
   }
 
-  const links: SankeyLink[] = [...linkTotals].map(([k, cents]) => {
+  let links: SankeyLink[] = [...linkTotals].map(([k, cents]) => {
     const [from, to] = k.split('>');
     return { from, to, cents };
   });
   links.push(...breakCycles(netTransfers(transfers)));
+  links = tidy(links, nodes);
 
   const used = new Set(links.flatMap((l) => [l.from, l.to]));
   return { nodes: [...nodes.values()].filter((n) => used.has(n.key)), links };
 }
+
+/** Income sources below this share of all money in are folded into "Other money in". */
+export const MIN_INCOME_SHARE = 0.02;
+const OTHER_IN = 'in:uncategorized';
+const UNLINKED_IN = 'tin:all';
+
+/**
+ * Fewer, larger nodes: small income sources fold into "Other money in", and
+ * unlinked transfers in (one node per transfer category) become one node.
+ */
+function tidy(links: SankeyLink[], nodes: Map<string, SankeyNode>): SankeyLink[] {
+  const incomeTotal = new Map<string, number>();
+  for (const l of links) if (l.from.startsWith('in:')) incomeTotal.set(l.from, (incomeTotal.get(l.from) ?? 0) + l.cents);
+  const allIncome = [...incomeTotal.values()].reduce((a, b) => a + b, 0);
+
+  const remap = (key: string) => {
+    if (key.startsWith('tin:')) {
+      if (!nodes.has(UNLINKED_IN)) nodes.set(UNLINKED_IN, { key: UNLINKED_IN, label: 'Transfers in (not linked)', role: 'transfer' });
+      return UNLINKED_IN;
+    }
+    if (key.startsWith('in:') && key !== OTHER_IN && (incomeTotal.get(key) ?? 0) < allIncome * MIN_INCOME_SHARE) {
+      if (!nodes.has(OTHER_IN)) nodes.set(OTHER_IN, { key: OTHER_IN, label: 'Other money in', role: 'income' });
+      return OTHER_IN;
+    }
+    return key;
+  };
+
+  const merged = new Map<string, SankeyLink>();
+  for (const l of links) {
+    const from = remap(l.from);
+    const k = `${from}>${l.to}`;
+    const existing = merged.get(k);
+    if (existing) existing.cents += l.cents;
+    else merged.set(k, { from, to: l.to, cents: l.cents });
+  }
+  return [...merged.values()];
+}
+
+export interface SankeyLayout {
+  /** Column index per node key (0 = money in). */
+  column: Record<string, number>;
+  /** Vertical order within a column (lower = higher up). */
+  priority: Record<string, number>;
+}
+
+/**
+ * Column and vertical order for each node, to keep the diagram readable:
+ *   column 0      money in
+ *   columns 1..n  accounts, in the order money moves between them
+ *   last column   where money went (spending, then transfers out)
+ * Within each column, nodes are ordered by the weighted average position of
+ * what they connect to (barycentre heuristic), alternating sweeps left and
+ * right; the ordering with the fewest size-weighted crossings is kept.
+ */
+export function layoutSankey(graph: SankeyGraph): SankeyLayout {
+  const { nodes, links } = graph;
+  const role = new Map(nodes.map((n) => [n.key, n.role]));
+  const isAccount = (k: string) => role.get(k) === 'account';
+  const isSource = (k: string) => !isAccount(k) && links.some((l) => l.from === k);
+
+  // Account depth: longest chain of account -> account transfers into it.
+  const depth = new Map<string, number>();
+  const depthOf = (k: string): number => {
+    if (depth.has(k)) return depth.get(k)!;
+    depth.set(k, 1); // guards against cycles (none after breakCycles)
+    const fromAccounts = links.filter((l) => l.to === k && isAccount(l.from)).map((l) => depthOf(l.from) + 1);
+    const d = Math.max(1, ...fromAccounts);
+    depth.set(k, d);
+    return d;
+  };
+  const accounts = nodes.filter((n) => n.role === 'account').map((n) => n.key);
+  accounts.forEach(depthOf);
+  const last = Math.max(1, ...accounts.map((k) => depth.get(k)!)) + 1;
+
+  const column: Record<string, number> = {};
+  for (const n of nodes) column[n.key] = isAccount(n.key) ? depth.get(n.key)! : isSource(n.key) ? 0 : last;
+
+  const size = new Map<string, number>();
+  for (const l of links) {
+    size.set(l.from, (size.get(l.from) ?? 0) + l.cents);
+    size.set(l.to, (size.get(l.to) ?? 0) + l.cents);
+  }
+  const columns: string[][] = Array.from({ length: last + 1 }, () => []);
+  for (const n of nodes) columns[column[n.key]].push(n.key);
+  const bySize = (a: string, b: string) => (size.get(b) ?? 0) - (size.get(a) ?? 0) || a.localeCompare(b);
+  // Destinations: spending above transfers out, always.
+  const band = (k: string) => (column[k] === last && role.get(k) === 'transfer' ? 1 : 0);
+  for (const keys of columns) keys.sort((a, b) => band(a) - band(b) || bySize(a, b));
+
+  // Centre of each node within its column, as a fraction of the column's total size.
+  const centre = new Map<string, number>();
+  const measure = (c: number) => {
+    const total = columns[c].reduce((t, k) => t + (size.get(k) ?? 0), 0) || 1;
+    let acc = 0;
+    for (const k of columns[c]) {
+      const s = size.get(k) ?? 0;
+      centre.set(k, (acc + s / 2) / total);
+      acc += s;
+    }
+  };
+  columns.forEach((_, c) => measure(c));
+
+  const barycentre = (k: string, dir: 'out' | 'in') => {
+    let weight = 0;
+    let sum = 0;
+    for (const l of links) {
+      const other = dir === 'out' ? (l.from === k ? l.to : null) : l.to === k ? l.from : null;
+      if (other === null) continue;
+      weight += l.cents;
+      sum += l.cents * (centre.get(other) ?? 0.5);
+    }
+    return weight ? sum / weight : (centre.get(k) ?? 0.5);
+  };
+  const reorder = (c: number, dir: 'out' | 'in') => {
+    const bc = new Map(columns[c].map((k) => [k, barycentre(k, dir)]));
+    columns[c].sort((a, b) => band(a) - band(b) || bc.get(a)! - bc.get(b)! || bySize(a, b));
+    measure(c);
+  };
+  // Size-weighted count of crossing links, treating each link as a straight
+  // line from (column, centre) to (column, centre).
+  const crossings = () => {
+    const at = (l: SankeyLink, x: number) => {
+      const x0 = column[l.from];
+      const x1 = column[l.to];
+      return centre.get(l.from)! + ((centre.get(l.to)! - centre.get(l.from)!) * (x - x0)) / (x1 - x0);
+    };
+    let total = 0;
+    for (let i = 0; i < links.length; i++) {
+      for (let j = i + 1; j < links.length; j++) {
+        const a = links[i];
+        const b = links[j];
+        if (a.from === b.from || a.to === b.to) continue;
+        const x0 = Math.max(column[a.from], column[b.from]);
+        const x1 = Math.min(column[a.to], column[b.to]);
+        if (x0 >= x1) continue;
+        if ((at(a, x0) - at(b, x0)) * (at(a, x1) - at(b, x1)) < 0) total += Math.sqrt(a.cents * b.cents);
+      }
+    }
+    return total;
+  };
+
+  let best = { score: crossings(), order: columns.map((k) => [...k]) };
+  for (let pass = 0; pass < 8; pass++) {
+    for (let c = 1; c <= last; c++) reorder(c, 'in'); // align with sources
+    for (let c = last - 1; c >= 0; c--) reorder(c, 'out'); // align with destinations
+    const score = crossings();
+    if (score < best.score) best = { score, order: columns.map((k) => [...k]) };
+  }
+  best.order.forEach((keys, c) => (columns[c] = keys));
+
+  const priority: Record<string, number> = {};
+  columns.forEach((keys) => keys.forEach((k, i) => (priority[k] = i)));
+  return { column, priority };
+}
+

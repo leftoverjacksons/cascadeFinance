@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { breakCycles, buildSankey, netTransfers, type FlowRow } from './flows';
+import { breakCycles, buildSankey, layoutSankey, netTransfers, type FlowRow } from './flows';
 import { OTHER } from './summary';
 
 const names = {
@@ -77,3 +77,60 @@ describe('buildSankey', () => {
     expect(g.nodes.some((n) => n.key === 'acct:sav')).toBe(false);
   });
 });
+
+describe('tidying', () => {
+  it('folds income sources under 2% into "Other money in" and merges unlinked transfers in', () => {
+    const g = buildSankey(
+      [
+        { kind: 'income', source: 'pay', target: 'chk', cents: 1000000 },
+        { kind: 'income', source: 'int', target: 'chk', cents: 100 },
+        { kind: 'in_other', source: 'loan', target: 'chk', cents: 5000 },
+        { kind: 'in_other', source: 'cc', target: 'jnt', cents: 7000 },
+        { kind: 'spend', source: 'chk', target: 'food', cents: 900000 },
+      ],
+      names,
+    );
+    const froms = new Set(g.links.map((l) => l.from));
+    expect(froms.has('in:int')).toBe(false);
+    expect(g.links.find((l) => l.from === 'in:uncategorized')?.cents).toBe(100);
+    expect(g.links.filter((l) => l.from === 'tin:all').map((l) => l.cents).sort()).toEqual([5000, 7000]);
+    expect(g.nodes.find((n) => n.key === 'tin:all')?.label).toBe('Transfers in (not linked)');
+  });
+});
+
+describe('layoutSankey', () => {
+  // Two earners, each paid into their own checking; checking -> joint -> savings.
+  const g = buildSankey(
+    [
+      { kind: 'income', source: 'pay', target: 'chk', cents: 500000 },
+      { kind: 'income', source: 'shop', target: 'jnt', cents: 400000 },
+      { kind: 'transfer', source: 'chk', target: 'jnt', cents: 200000 },
+      { kind: 'transfer', source: 'jnt', target: 'sav', cents: 150000 },
+      { kind: 'spend', source: 'chk', target: 'food', cents: 250000 },
+      { kind: 'spend', source: 'jnt', target: 'shop', cents: 300000 },
+      { kind: 'spend', source: 'sav', target: 'food', cents: 100000 },
+      { kind: 'out_other', source: 'chk', target: 'loan', cents: 900000 },
+    ],
+    names,
+  );
+  const { column, priority } = layoutSankey(g);
+
+  it('puts money in first, accounts in transfer order, destinations last', () => {
+    expect(column['in:pay']).toBe(0);
+    expect(column['acct:chk']).toBe(1);
+    expect(column['acct:jnt']).toBe(2);
+    expect(column['acct:sav']).toBe(3);
+    expect(column['spend:food']).toBe(4);
+    expect(column['tout:loan']).toBe(4);
+  });
+
+  it('lists spending before transfers out, whatever their size', () => {
+    expect(priority['spend:food']).toBeLessThan(priority['tout:loan']);
+    expect(priority['spend:other']).toBeLessThan(priority['tout:loan']);
+  });
+
+  it('gives every node a priority within its column', () => {
+    for (const n of g.nodes) expect(priority[n.key]).toBeGreaterThanOrEqual(0);
+  });
+});
+

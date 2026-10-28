@@ -300,7 +300,7 @@ Model:
 - Linked sides take a transfer category (card payment / loan payment / between accounts by the receiving account's type) with `category_source = 'transfer'`, which rules never override; both drop out of income and spending regardless of wording.
 - Matching runs after every import (statement trigger, after categorisation), on demand ("Find matches"), and once over existing data at migration time. Unlinking records a rejection so the pair is never re-proposed; choosing a spending category by hand unlinks and rejects. Manual linking (`link_transfer`) with candidate list (`transfer_candidates`: opposite sign, other account, ±10 days, exact amounts first).
 - Transfers page: To check (suggested), No match found (transfer-categorised but unlinked, grouped by category), Linked. Transactions show "→ Joint" / "← Checking".
-- **Money flow (Sankey)** panel (chartjs-chart-sankey pinned to 0.14.0: later versions had an unusual burst of releases): income categories → accounts → other accounts (linked transfers, netted per account pair; cycles broken at the smallest flow) → spending groups (same colours as the spending chart) / unmatched transfers out. Flows under 0.3 % of the largest node are not drawn but stay in the table view. On phones and desktop.
+- **Money flow (Sankey)** panel (chartjs-chart-sankey pinned to 0.14.0: later versions had an unusual burst of releases): income categories → accounts → other accounts (linked transfers, netted per account pair; cycles broken at the smallest flow) → spending groups (same colours as the spending chart) / unmatched transfers out. Flows under 0.3 % of the largest node are not drawn but stay in the table view. On phones and desktop. Layout (2026-10-28): accounts are placed in columns by transfer depth; income sources under 2 % of money in fold into "Other money in"; unlinked transfers in are one node; nodes are ordered within columns by barycentre sweeps, keeping the order with the fewest size-weighted crossings (`layoutSankey` in `src/domain/flows.ts`).
 - Dashboard layouts record which panels existed when saved; panels added later appear automatically for existing layouts, hidden ones stay hidden.
 - Known limits: loan and card payments stay "No match found" while those accounts are tracked by statement balance only (no transactions to pair with). Two-hop transfers through the joint account are linked as two separate transfers until part 2.
 - Tests: 25 new pgTAP tests (131 total; verified to fail when the date window is widened), 11 new unit tests, new Playwright transfers scenario.
@@ -320,11 +320,16 @@ Model:
 
 1. **Credit card samples** (tabled): one export each from Amex, Discover, IKEA card; Member 1's cards, if any.
 2. **Maximum USAA export range:** to be determined empirically by trying the longest custom date range the site allows. Overlapping chunks are safe to import (dedup is order-independent).
-- **Loan payments: transfer or spending? (TABLED 2026-10-31, revisit.)** A loan payment is principal (a transfer: reduces the liability, net worth unchanged) plus interest (a real cost); a mortgage payment may also include escrow (taxes, insurance: real costs). Currently loan payments are a *transfer* (bank category "Auto Payment" → Transfers › Loan Payments), so spending is understated and "avg saved" overstated by the payment (~$579/month for the auto loan). Options:
-  - **A. Transfer (current).** Optionally "point" unmatched loan payments at the loan account so the Sankey shows Checking → Car loan and they leave "No match found".
-  - **B. Spending (recommended).** Move Loan Payments into a spending group (e.g. new "Debt Payments": auto loan, student loan, mortgage); payments into loan accounts count as spending even if loan transactions are imported later. Matches cash-flow budgeting (YNAB-style).
+- **Loan payments: transfer or spending? (RESOLVED 2026-10-28: option B, spending.)** A loan payment is principal (a transfer: reduces the liability, net worth unchanged) plus interest (a real cost); a mortgage payment may also include escrow (taxes, insurance: real costs). Options considered:
+  - **A. Transfer.** Optionally "point" unmatched loan payments at the loan account so the Sankey shows Checking → Car loan.
+  - **B. Spending (chosen).** Loan payments count as spending in a spending category; matches cash-flow budgeting (YNAB-style).
   - **C. Split** principal (transfer) / interest (spending) using loan terms (rate, schedule); most precise, needs data the household chose not to maintain.
-  In all cases net worth stays correct via statement balances on the loan accounts (household should record the auto loan and mortgage balances).
+
+  Applied without code changes, through categories and rules:
+  - **Mortgage:** Housing › Mortgage (spending, shared). Rule on the lender's description.
+  - **Auto loan (Ford Motor Credit):** Transportation › Auto Loan (spending, not shared unless the car is). Rule on the lender's description with priority 500: after the "OD FEE" rule (400, so overdraft fees on the loan ACH stay fees) and before the bank-category mapping (1000, "Auto Payment" → Loan Payments). Lower number = applied first.
+
+  Consequence: net worth double-counts nothing, because loan balances come from statement snapshots, not from payments. Spending includes principal, so "avg saved" understates true saving by the principal portion. If loan transactions are ever imported, the payment would also be linked as a transfer; the household should then re-categorise or unlink. Revisit if precise saving rates matter (option C).
 
 ## 12. Decision log
 
@@ -370,3 +375,5 @@ Model:
 | 2026-11-01 | Shared-by-default per category + per-transaction override | Few decisions up front; exceptions where they occur | Accepted |
 | 2026-11-01 | Transfer matching recomputed on every run (order-independent) | Same result regardless of import order | Accepted |
 | 2026-10-28 | Joint accounts are a shared pot: contributions and withdrawals count toward the member balance | Joint checking/savings is how mortgage and bill money flows; contributions are the main shared payments | Accepted |
+| 2026-10-28 | Loan payments (mortgage, auto loan) are spending, not transfers (§11, option B) | Cash-flow view the household budgets with; balances still come from statements | Accepted |
+| 2026-10-28 | Money-flow layout: income → accounts (ordered by transfer depth) → destinations; small income sources (<2%) folded into "Other money in"; unlinked transfers in merged; vertical order by barycentre | Fewer crossings and overlapping labels | Accepted |
