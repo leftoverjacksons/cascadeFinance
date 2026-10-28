@@ -1,12 +1,14 @@
-// Spring physics for the money-flow diagram's nodes.
+// Physics for the money-flow diagram.
 //
-// Every node has a resting place: the computed layout, or where it was pinned
-// (dragged). A free node's resting place also moves with its neighbours: it is
-// displaced by PULL times the value-weighted average displacement of the nodes
-// it exchanges money with, so dragging a node tugs its parents and children
-// along, less with every step away. Nodes in a column are kept from
-// overlapping. Each node then springs toward its resting place with a little
-// overshoot.
+// Tails want to be straight: each free node is pulled toward the height that
+// makes its tails as level as possible (the value-weighted average of where
+// their other ends are), which minimises the diagram's total bend. A weak
+// spring to the computed layout keeps the whole picture from drifting.
+// Nodes in a column may pass each other (each column is re-sorted every
+// frame) but never overlap. Each node's tails are stacked by where their other
+// end is and slide to new places in the stack rather than jumping. Pinned
+// (dragged) nodes stay where they were put. Everything moves on damped
+// springs, with a little overshoot.
 
 export interface Body {
   x: number;
@@ -22,11 +24,21 @@ export interface PhysicsNode {
   y: number;
   height: number;
   column: number;
+  /** Accounts send transfers to other accounts from the side facing them. */
+  isAccount?: boolean;
+}
+
+export interface PhysicsLink {
+  from: string;
+  to: string;
+  cents: number;
+  /** Drawn thickness. */
+  width: number;
 }
 
 export interface PhysicsWorld {
   nodes: PhysicsNode[];
-  links: { from: string; to: string; cents: number }[];
+  links: PhysicsLink[];
   /** Pinned nodes' top-left corners. */
   pinned: Map<string, { x: number; y: number }>;
   /** Drawing area height, and the gap kept between nodes in a column. */
@@ -34,40 +46,95 @@ export interface PhysicsWorld {
   gap: number;
 }
 
-/** Share of the neighbours' displacement a free node follows. */
-export const PULL = 0.7;
+/** Where each tail sits in its nodes' stacks: centre offsets from the node tops. */
+export interface Offsets {
+  s: number;
+  t: number;
+}
+
+export interface PhysicsState {
+  bodies: Map<string, Body>;
+  offsets: Map<string, Offsets>;
+}
+
+/** Weight of the spring to the computed layout, relative to a node's tails. */
+export const ANCHOR = 0.05;
 const STIFFNESS = 0.14;
 const DAMPING = 0.76;
+/** Share of the remaining distance a tail slides each frame. */
+const SLIDE = 0.25;
 const REST = 0.05;
 
-/** Where each node would rest given where its neighbours are now. */
-export function restingPlaces(world: PhysicsWorld, bodies: Map<string, Body>): Map<string, { x: number; y: number }> {
-  const base = new Map(world.nodes.map((n) => [n.key, n]));
-  const displacement = (key: string) => (bodies.get(key)?.y ?? base.get(key)!.y) - base.get(key)!.y;
+export const linkKey = (l: { from: string; to: string }) => `${l.from}>${l.to}`;
 
+/** Initial state: nodes at the computed layout (or their pins), tails as given. */
+export function initialState(world: PhysicsWorld, offsets: Map<string, Offsets>): PhysicsState {
+  const bodies = new Map<string, Body>();
+  for (const n of world.nodes) {
+    const at = world.pinned.get(n.key) ?? n;
+    bodies.set(n.key, { x: at.x, y: at.y, vx: 0, vy: 0 });
+  }
+  return { bodies, offsets: new Map(offsets) };
+}
+
+/** Where each tail belongs in its nodes' stacks, given where the nodes are now. */
+export function stackOffsets(world: PhysicsWorld, bodies: Map<string, Body>): Map<string, Offsets> {
+  const node = new Map(world.nodes.map((n) => [n.key, n]));
+  const centre = (k: string) => bodies.get(k)!.y + node.get(k)!.height / 2;
+  const out = new Map<string, Offsets>();
+  for (const l of world.links) out.set(linkKey(l), { s: 0, t: 0 });
+  for (const n of world.nodes) {
+    // A transfer to another account leaves from the side facing it.
+    const side = (l: PhysicsLink) =>
+      n.isAccount && node.get(l.to)?.isAccount ? (centre(l.to) > centre(n.key) ? 1 : -1) : 0;
+    let y = 0;
+    for (const l of world.links
+      .filter((l) => l.from === n.key)
+      .sort((a, b) => side(a) - side(b) || centre(a.to) - centre(b.to))) {
+      out.get(linkKey(l))!.s = y + l.width / 2;
+      y += l.width;
+    }
+    y = 0;
+    for (const l of world.links.filter((l) => l.to === n.key).sort((a, b) => centre(a.from) - centre(b.from))) {
+      out.get(linkKey(l))!.t = y + l.width / 2;
+      y += l.width;
+    }
+  }
+  return out;
+}
+
+/** Where each node would rest given where everything is now. */
+export function restingPlaces(world: PhysicsWorld, state: PhysicsState): Map<string, { x: number; y: number }> {
+  const { bodies, offsets } = state;
   const rest = new Map<string, { x: number; y: number }>();
   for (const n of world.nodes) {
     const pin = world.pinned.get(n.key);
     if (pin) {
-      rest.set(n.key, pin);
+      rest.set(n.key, { ...pin });
       continue;
     }
+    // Level tails: this node's top such that each tail's two ends are at the same height.
     let weight = 0;
     let sum = 0;
     for (const l of world.links) {
-      const other = l.from === n.key ? l.to : l.to === n.key ? l.from : null;
-      if (!other || !base.has(other)) continue;
+      const o = offsets.get(linkKey(l));
+      if (!o) continue;
+      if (l.from === n.key) sum += l.cents * (bodies.get(l.to)!.y + o.t - o.s);
+      else if (l.to === n.key) sum += l.cents * (bodies.get(l.from)!.y + o.s - o.t);
+      else continue;
       weight += l.cents;
-      sum += l.cents * displacement(other);
     }
-    rest.set(n.key, { x: n.x, y: n.y + (weight ? (PULL * sum) / weight : 0) });
+    const anchor = ANCHOR * (weight || 1);
+    rest.set(n.key, { x: n.x, y: (sum + anchor * n.y) / (weight + anchor) });
   }
 
-  // Keep nodes in a column apart (pinned nodes stay where they were put).
+  // Keep nodes in a column apart and inside the area; they may change order.
   const columns = new Map<number, PhysicsNode[]>();
   for (const n of world.nodes) columns.set(n.column, [...(columns.get(n.column) ?? []), n]);
   for (const nodes of columns.values()) {
-    const sorted = [...nodes].sort((a, b) => rest.get(a.key)!.y - rest.get(b.key)!.y);
+    const sorted = [...nodes].sort(
+      (a, b) => rest.get(a.key)!.y + a.height / 2 - (rest.get(b.key)!.y + b.height / 2),
+    );
     let top = 0;
     for (const n of sorted) {
       const r = rest.get(n.key)!;
@@ -81,6 +148,15 @@ export function restingPlaces(world: PhysicsWorld, bodies: Map<string, Body>): M
       bottom = r.y - world.gap;
     }
   }
+
+  // Levelling tails is indifferent to shifting everything up or down, so the
+  // picture can drift to an edge. Unless pins hold it, keep it centred.
+  if (world.pinned.size === 0 && world.nodes.length) {
+    const top = Math.min(...world.nodes.map((n) => rest.get(n.key)!.y));
+    const bottom = Math.max(...world.nodes.map((n) => rest.get(n.key)!.y + n.height));
+    const shift = (world.height - top - bottom) / 2;
+    for (const r of rest.values()) r.y += shift;
+  }
   return rest;
 }
 
@@ -88,21 +164,32 @@ export function restingPlaces(world: PhysicsWorld, bodies: Map<string, Body>): M
  * Advances the simulation one frame. `held` is the node being dragged, which
  * stays where the pointer put it. Returns false once everything is at rest.
  */
-export function step(world: PhysicsWorld, bodies: Map<string, Body>, held: string | null): boolean {
-  // New nodes start where they are pinned, or at the computed layout.
+export function step(world: PhysicsWorld, state: PhysicsState, held: string | null): boolean {
+  const { bodies, offsets } = state;
   for (const n of world.nodes) {
     if (!bodies.has(n.key)) {
       const at = world.pinned.get(n.key) ?? n;
       bodies.set(n.key, { x: at.x, y: at.y, vx: 0, vy: 0 });
     }
   }
-  const rest = restingPlaces(world, bodies);
   let moving = false;
+
+  // Tails slide toward their places in the stacks.
+  for (const [key, target] of stackOffsets(world, bodies)) {
+    const o = offsets.get(key) ?? { ...target };
+    o.s += (target.s - o.s) * SLIDE;
+    o.t += (target.t - o.t) * SLIDE;
+    if (Math.abs(target.s - o.s) + Math.abs(target.t - o.t) > REST) moving = true;
+    else Object.assign(o, target);
+    offsets.set(key, o);
+  }
+
+  const rest = restingPlaces(world, state);
   for (const n of world.nodes) {
     const target = rest.get(n.key)!;
     const b = bodies.get(n.key)!;
     if (n.key === held) {
-      bodies.set(n.key, { ...b, vx: 0, vy: 0 });
+      Object.assign(b, { vx: 0, vy: 0 });
       continue;
     }
     b.vx = (b.vx + STIFFNESS * (target.x - b.x)) * DAMPING;
@@ -112,10 +199,24 @@ export function step(world: PhysicsWorld, bodies: Map<string, Body>, held: strin
     if (Math.abs(b.vx) + Math.abs(b.vy) > REST || Math.abs(target.x - b.x) + Math.abs(target.y - b.y) > REST * 4) {
       moving = true;
     } else {
-      // Close enough: land exactly.
-      Object.assign(b, { x: target.x, y: target.y, vx: 0, vy: 0 });
+      Object.assign(b, { x: target.x, y: target.y, vx: 0, vy: 0 }); // close enough: land exactly
     }
-    bodies.set(n.key, b);
   }
   return moving || held !== null;
+}
+
+/** Runs the simulation to rest without drawing (e.g. before the first frame). */
+export function settle(world: PhysicsWorld, state: PhysicsState, maxSteps = 600): void {
+  for (let i = 0; i < maxSteps && step(world, state, null); i++);
+}
+
+/** Size-weighted bend of all tails: the sum of cents × (vertical drop)². What the physics lowers. */
+export function totalBend(world: PhysicsWorld, state: PhysicsState): number {
+  let total = 0;
+  for (const l of world.links) {
+    const o = state.offsets.get(linkKey(l))!;
+    const drop = state.bodies.get(l.from)!.y + o.s - (state.bodies.get(l.to)!.y + o.t);
+    total += l.cents * drop * drop;
+  }
+  return total;
 }

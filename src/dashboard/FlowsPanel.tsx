@@ -27,14 +27,23 @@ function storedView(): FlowView {
   }
 }
 
-/** Saved positions, ignoring anything malformed. */
+/**
+ * Saved positions: { v: 2, nodes: { key: { x, y } } }, where x and y are the
+ * node's top-left as fractions of the drawing area, shared by every period.
+ * (Version 1 stored offsets from the computed layout; those are ignored.)
+ */
+const POSITIONS_VERSION = 2;
+
+/** Saved positions, ignoring anything malformed or from an older version. */
 export function sanitizePositions(raw: unknown): SankeyPositions {
   const out: SankeyPositions = {};
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
-  for (const [key, v] of Object.entries(raw as Record<string, unknown>)) {
+  const saved = raw as { v?: unknown; nodes?: unknown } | null;
+  if (!saved || typeof saved !== 'object' || saved.v !== POSITIONS_VERSION) return out;
+  if (!saved.nodes || typeof saved.nodes !== 'object' || Array.isArray(saved.nodes)) return out;
+  for (const [key, v] of Object.entries(saved.nodes as Record<string, unknown>)) {
     const { x, y } = (v ?? {}) as { x?: unknown; y?: unknown };
     if (typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y)) {
-      out[key] = { x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)) };
+      out[key] = { x: Math.max(0, Math.min(1, x)), y: Math.max(0, Math.min(1, y)) };
     }
   }
   return out;
@@ -70,7 +79,7 @@ function useSavedPositions() {
         // (A query builder only runs when awaited.)
         const { error } = await supabase
           .from('user_preferences')
-          .upsert({ user_id: userId, sankey_positions: next as unknown as Json });
+          .upsert({ user_id: userId, sankey_positions: { v: POSITIONS_VERSION, nodes: next } as unknown as Json });
         if (error) void toast({ message: `Positions not saved: ${error.message}`, duration: 4000, color: 'danger' });
       }, SAVE_DELAY_MS);
     },

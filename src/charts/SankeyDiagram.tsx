@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { SankeyGraph, SankeyNode } from '../domain/flows';
 import { formatCents } from '../domain/money';
 import { placeSankey } from './sankeyLayout';
-import { step, type Body, type PhysicsWorld } from './sankeyPhysics';
+import { initialState, linkKey, settle, step, type PhysicsState, type PhysicsWorld } from './sankeyPhysics';
 
 interface Props {
   graph: SankeyGraph;
@@ -11,7 +11,7 @@ interface Props {
   label: string;
   /** Fixed height in px; omit to fill the parent (e.g. a resizable panel). */
   height?: number;
-  /** Dragged node offsets, as fractions of the diagram's width and height. */
+  /** Where dragged nodes were put (top-left), as fractions of the drawing area's width and height. */
   positions: SankeyPositions;
   onPositionsChange: (positions: SankeyPositions) => void;
   /** Selected link ("from>to"): stays highlighted. */
@@ -39,19 +39,21 @@ interface Hover {
 
 interface Drag {
   key: string;
-  /** Pointer position and the node's offset when the drag started. */
+  /** Pointer position and the node's top-left when the drag started. */
   startX: number;
   startY: number;
-  dx: number;
-  dy: number;
+  x: number;
+  y: number;
 }
 
 /**
  * Interactive money-flow diagram drawn as SVG: hover for amounts, click a flow
- * to select it, drag a node to move it. Nodes are on springs (sankeyPhysics):
- * a dragged node stays where it is put (double-click releases it) and tugs the
- * nodes it exchanges money with along. Flows are revealed left to right when
- * the data changes. Colours follow the light/dark theme through CSS variables.
+ * to select it, drag a node to move it. Layout physics (sankeyPhysics): tails
+ * pull their nodes level, nodes may pass each other in a column, tails slide
+ * within their stacks; a dragged node stays where it is put (double-click
+ * releases it). Settles before the first frame when the data or size changes;
+ * flows are revealed left to right when the data changes. Colours follow the
+ * light/dark theme through CSS variables.
  */
 export default function SankeyDiagram({
   graph,
@@ -96,6 +98,7 @@ export default function SankeyDiagram({
   );
 
   // ── Physics ──
+  const area = { width: size.width, height: Math.max(0, size.height - 2 * MARGIN) };
   const world: PhysicsWorld = useMemo(() => {
     const columns = [...new Set(placed.nodes.map((n) => Math.round(n.x0)))].sort((a, b) => a - b);
     return {
@@ -105,29 +108,48 @@ export default function SankeyDiagram({
         y: n.y0,
         height: n.y1 - n.y0,
         column: columns.indexOf(Math.round(n.x0)),
+        isAccount: n.role === 'account',
       })),
       links: placed.links,
       pinned: new Map(
         placed.nodes
           .filter((n) => positions[n.key])
-          .map((n) => [n.key, { x: n.x0 + positions[n.key].x * size.width, y: n.y0 + positions[n.key].y * size.height }]),
+          .map((n) => [
+            n.key,
+            {
+              x: clamp(positions[n.key].x * area.width, 0, area.width - (n.x1 - n.x0)),
+              y: clamp(positions[n.key].y * area.height, 0, area.height - (n.y1 - n.y0)),
+            },
+          ]),
       ),
-      height: Math.max(0, size.height - 2 * MARGIN),
+      height: area.height,
       gap: GAP,
     };
+    // (area is derived from size)
   }, [placed, positions, size]);
-  const bodies = useRef(new Map<string, Body>());
+  const state = useRef<PhysicsState>({ bodies: new Map(), offsets: new Map() });
   const worldRef = useRef(world);
   worldRef.current = world;
+  // New data or size: start from the computed layout and settle before drawing.
+  const settledFor = useRef<unknown>(null);
+  if (settledFor.current !== placed) {
+    settledFor.current = placed;
+    const nodeTop = new Map(placed.nodes.map((n) => [n.key, n.y0]));
+    state.current = initialState(
+      world,
+      new Map(placed.links.map((l) => [linkKey(l), { s: l.sy - nodeTop.get(l.from)!, t: l.ty - nodeTop.get(l.to)! }])),
+    );
+    settle(world, state.current);
+  }
   const frameRef = useRef(0);
   const [, setFrame] = useState(0);
   const run = useCallback(() => {
     if (frameRef.current) return;
     const tick = () => {
-      let moving = step(worldRef.current, bodies.current, drag.current?.key ?? null);
+      let moving = step(worldRef.current, state.current, drag.current?.key ?? null);
       // Reduced motion: jump straight to rest.
-      for (let i = 0; moving && reducedMotion() && i < 500; i++) {
-        moving = step(worldRef.current, bodies.current, drag.current?.key ?? null);
+      for (let i = 0; moving && !drag.current && reducedMotion() && i < 600; i++) {
+        moving = step(worldRef.current, state.current, null);
       }
       setFrame((f) => f + 1);
       frameRef.current = moving ? requestAnimationFrame(tick) : 0;
@@ -165,27 +187,22 @@ export default function SankeyDiagram({
     };
   }, [graph]);
 
-  // Nodes where the physics has them; links follow their ends. (Recomputed
-  // every render: the physics re-renders once per animation frame.)
+  // Nodes and tails where the physics has them. (Recomputed every render: the
+  // physics re-renders once per animation frame.)
   const moved = (() => {
-    const off = (key: string) => {
-      const b = bodies.current.get(key);
-      const n = placed.nodes.find((x) => x.key === key);
-      return b && n ? { dx: b.x - n.x0, dy: b.y - n.y0 } : { dx: 0, dy: 0 };
-    };
-    return {
-      nodes: placed.nodes.map((n) => {
-        const { dx, dy } = off(n.key);
-        return { ...n, x0: n.x0 + dx, x1: n.x1 + dx, y0: n.y0 + dy, y1: n.y1 + dy };
-      }),
-      links: placed.links.map((l) => ({
-        ...l,
-        sx: l.sx + off(l.from).dx,
-        sy: l.sy + off(l.from).dy,
-        tx: l.tx + off(l.to).dx,
-        ty: l.ty + off(l.to).dy,
-      })),
-    };
+    const at = (key: string) => state.current.bodies.get(key);
+    const nodes = placed.nodes.map((n) => {
+      const b = at(n.key) ?? { x: n.x0, y: n.y0 };
+      return { ...n, x0: b.x, x1: b.x + (n.x1 - n.x0), y0: b.y, y1: b.y + (n.y1 - n.y0) };
+    });
+    const byKey = new Map(nodes.map((n) => [n.key, n]));
+    const links = placed.links.map((l) => {
+      const o = state.current.offsets.get(linkKey(l));
+      const from = byKey.get(l.from)!;
+      const to = byKey.get(l.to)!;
+      return { ...l, sx: from.x1, sy: from.y0 + (o?.s ?? 0), tx: to.x0, ty: to.y0 + (o?.t ?? 0) };
+    });
+    return { nodes, links };
   })();
 
   const color = useMemo(() => new Map(graph.nodes.map((n) => [n.key, colorOf(n)])), [graph, colorOf]);
@@ -204,24 +221,20 @@ export default function SankeyDiagram({
 
   const startDrag = (key: string) => (e: React.PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId);
-    const n = placed.nodes.find((x) => x.key === key);
-    const b = bodies.current.get(key);
-    if (!n) return;
+    const b = state.current.bodies.get(key);
+    if (!b) return;
     // Start from where the node is now (it may be mid-bounce).
-    drag.current = { key, startX: e.clientX, startY: e.clientY, dx: (b?.x ?? n.x0) - n.x0, dy: (b?.y ?? n.y0) - n.y0 };
+    drag.current = { key, startX: e.clientX, startY: e.clientY, x: b.x, y: b.y };
   };
   const moveDrag = (e: React.PointerEvent) => {
     const d = drag.current;
-    if (!d) return;
-    const n = placed.nodes.find((x) => x.key === d.key);
-    if (!n) return;
+    const n = d && placed.nodes.find((x) => x.key === d.key);
+    if (!d || !n || !area.width || !area.height) return;
     // Keep the node inside the drawing area.
-    const dx = clamp(d.dx + e.clientX - d.startX, -n.x0, size.width - n.x1);
-    const dy = clamp(d.dy + e.clientY - d.startY, -n.y0 - MARGIN, size.height - MARGIN - n.y1);
-    bodies.current.set(d.key, { x: n.x0 + dx, y: n.y0 + dy, vx: 0, vy: 0 });
-    if (size.width && size.height) {
-      onPositionsChange({ ...positions, [d.key]: { x: dx / size.width, y: dy / size.height } });
-    }
+    const x = clamp(d.x + e.clientX - d.startX, 0, area.width - (n.x1 - n.x0));
+    const y = clamp(d.y + e.clientY - d.startY, 0, area.height - (n.y1 - n.y0));
+    Object.assign(state.current.bodies.get(d.key)!, { x, y, vx: 0, vy: 0 });
+    onPositionsChange({ ...positions, [d.key]: { x: x / area.width, y: y / area.height } });
     run();
   };
   const endDrag = () => {
