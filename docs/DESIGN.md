@@ -306,6 +306,7 @@ Model:
   - Order within a column: barycentre sweeps, keeping the order with the fewest size-weighted crossings (`layoutSankey` in `src/domain/flows.ts`).
   - Heights: relaxation keeping that order; accounts and destinations move toward the value-weighted height of what feeds them, money-in sources toward what they feed. An account fed by two others sits between them.
   - Link stacking within a node: by the height of the other end, except transfers to another account, which leave from the side facing it (household request: Caitlin Checking → Caitlin Savings lowest on Caitlin Checking, Travis Checking → Caitlin Savings highest on Travis Checking).
+  - Interaction: hover a node or flow for amounts (its flows are highlighted); drag any node (mouse or touch) to move it, its flows follow; "Reset layout" restores the computed layout. Moved positions are not saved.
 - Dashboard layouts record which panels existed when saved; panels added later appear automatically for existing layouts, hidden ones stay hidden.
 - Known limits: loan and card payments stay "No match found" while those accounts are tracked by statement balance only (no transactions to pair with). Two-hop transfers through the joint account are linked as two separate transfers until part 2.
 - Tests: 25 new pgTAP tests (131 total; verified to fail when the date window is widened), 11 new unit tests, new Playwright transfers scenario.

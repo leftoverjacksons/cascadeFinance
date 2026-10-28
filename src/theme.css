@@ -714,3 +714,37 @@ button.sort {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
   pointer-events: none;
 }
+
+.sankey-node {
+  cursor: grab;
+  touch-action: none; /* dragging a node must not scroll the page on touch screens */
+}
+
+.sankey-node:active {
+  cursor: grabbing;
+}
+
+.sankey-reset {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+  font-size: 0.8rem;
+}
+
+.sankey-links {
+  animation: sankey-in 0.6s ease-out;
+}
+
+@keyframes sankey-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sankey-links {
+    animation: none;
+  }
+}

@@ -1,8 +1,4 @@
-import {
-  layoutSankey,
-  type SankeyGraph,
-  type SankeyNode,
-} from "../domain/flows";
+import { layoutSankey, type SankeyGraph, type SankeyNode } from '../domain/flows';
 
 export interface PlacedNode extends SankeyNode {
   x0: number;
@@ -53,13 +49,10 @@ export function placeSankey(
   opts: SankeyLayoutOptions,
 ): { nodes: PlacedNode[]; links: PlacedLink[] } {
   const { width, height, nodeWidth = 8 } = opts;
-  if (graph.links.length === 0 || width <= 0 || height <= 0)
-    return { nodes: [], links: [] };
+  if (graph.links.length === 0 || width <= 0 || height <= 0) return { nodes: [], links: [] };
 
   const { column: rawColumn, priority } = layoutSankey(graph);
-  const used = graph.nodes.filter((n) =>
-    graph.links.some((l) => l.from === n.key || l.to === n.key),
-  );
+  const used = graph.nodes.filter((n) => graph.links.some((l) => l.from === n.key || l.to === n.key));
   const first = Math.min(...used.map((n) => rawColumn[n.key]));
   const column = (k: string) => rawColumn[k] - first;
   const last = Math.max(...used.map((n) => column(n.key)));
@@ -70,8 +63,7 @@ export function placeSankey(
     outflow.set(l.from, (outflow.get(l.from) ?? 0) + l.cents);
     inflow.set(l.to, (inflow.get(l.to) ?? 0) + l.cents);
   }
-  const value = (k: string) =>
-    Math.max(inflow.get(k) ?? 0, outflow.get(k) ?? 0);
+  const value = (k: string) => Math.max(inflow.get(k) ?? 0, outflow.get(k) ?? 0);
 
   const columns: string[][] = Array.from({ length: last + 1 }, () => []);
   for (const n of used) columns[column(n.key)].push(n.key);
@@ -83,10 +75,7 @@ export function placeSankey(
   const ky = Math.min(
     ...columns
       .filter((c) => c.length)
-      .map(
-        (c) =>
-          (height - (c.length - 1) * pad) / c.reduce((t, k) => t + value(k), 0),
-      ),
+      .map((c) => (height - (c.length - 1) * pad) / c.reduce((t, k) => t + value(k), 0)),
   );
 
   const y0 = new Map<string, number>();
@@ -109,8 +98,7 @@ export function placeSankey(
   };
   // Start stacked and centred.
   for (const keys of columns) {
-    const total =
-      keys.reduce((t, k) => t + size(k), 0) + (keys.length - 1) * pad;
+    const total = keys.reduce((t, k) => t + size(k), 0) + (keys.length - 1) * pad;
     let y = (height - total) / 2;
     for (const k of keys) {
       y0.set(k, y);
@@ -118,25 +106,14 @@ export function placeSankey(
     }
   }
 
-  const towards = (
-    k: string,
-    ends: { key: string; cents: number }[],
-    alpha: number,
-  ) => {
+  const towards = (k: string, ends: { key: string; cents: number }[], alpha: number) => {
     const weight = ends.reduce((t, e) => t + e.cents, 0);
     if (!weight) return;
-    const ideal =
-      ends.reduce((t, e) => t + centre(e.key) * e.cents, 0) / weight;
+    const ideal = ends.reduce((t, e) => t + centre(e.key) * e.cents, 0) / weight;
     y0.set(k, y0.get(k)! + (ideal - centre(k)) * alpha);
   };
-  const sources = (k: string) =>
-    graph.links
-      .filter((l) => l.to === k)
-      .map((l) => ({ key: l.from, cents: l.cents }));
-  const targets = (k: string) =>
-    graph.links
-      .filter((l) => l.from === k)
-      .map((l) => ({ key: l.to, cents: l.cents }));
+  const sources = (k: string) => graph.links.filter((l) => l.to === k).map((l) => ({ key: l.from, cents: l.cents }));
+  const targets = (k: string) => graph.links.filter((l) => l.from === k).map((l) => ({ key: l.to, cents: l.cents }));
 
   for (let i = 0; i < ITERATIONS; i++) {
     const alpha = 1 - i / ITERATIONS;
@@ -146,23 +123,18 @@ export function placeSankey(
     }
     for (let c = last - 1; c >= 0; c--) {
       // Nodes nothing flows into (money in) follow what they feed.
-      for (const k of columns[c])
-        if (!inflow.get(k)) towards(k, targets(k), alpha);
+      for (const k of columns[c]) if (!inflow.get(k)) towards(k, targets(k), alpha);
       resolve(columns[c]);
     }
   }
 
-  const x0 = (k: string) =>
-    last === 0 ? 0 : (column(k) * (width - nodeWidth)) / last;
-  const isAccount = new Set(
-    graph.nodes.filter((n) => n.role === "account").map((n) => n.key),
-  );
+  const x0 = (k: string) => (last === 0 ? 0 : (column(k) * (width - nodeWidth)) / last);
+  const isAccount = new Set(graph.nodes.filter((n) => n.role === 'account').map((n) => n.key));
 
   // Stack links within each node.
   const sy = new Map<SankeyLinkKey, number>();
   const ty = new Map<SankeyLinkKey, number>();
-  const linkKey = (l: { from: string; to: string }): SankeyLinkKey =>
-    `${l.from}>${l.to}`;
+  const linkKey = (l: { from: string; to: string }): SankeyLinkKey => `${l.from}>${l.to}`;
   for (const k of used.map((n) => n.key)) {
     const side = (l: { from: string; to: string }) => {
       if (!isAccount.has(k) || !isAccount.has(l.to)) return 0;
@@ -176,9 +148,7 @@ export function placeSankey(
       sy.set(linkKey(l), y + (l.cents * ky) / 2);
       y += l.cents * ky;
     }
-    const into = graph.links
-      .filter((l) => l.to === k)
-      .sort((a, b) => centre(a.from) - centre(b.from));
+    const into = graph.links.filter((l) => l.to === k).sort((a, b) => centre(a.from) - centre(b.from));
     y = y0.get(k)!;
     for (const l of into) {
       ty.set(linkKey(l), y + (l.cents * ky) / 2);

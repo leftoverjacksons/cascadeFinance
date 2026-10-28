@@ -69,6 +69,29 @@ test('transfers between accounts are linked, reviewable, and shown as money flow
   await openTab(page, 'overview');
   const flows = activePage(page).locator('[data-panel=flows]');
   await expect(flows.getByTestId('sankey')).toBeVisible();
+  // Nodes can be dragged; their flows follow, and the layout can be reset.
+  // (Dragged right: a first-column node always has room that way.)
+  const node = flows.locator('.sankey-node[data-node^="in:"]').first();
+  await node.scrollIntoViewIfNeeded();
+  const before = (await node.locator('rect').nth(1).boundingBox())!;
+  const [x, y] = [before.x + before.width / 2, before.y + before.height / 2];
+  if (test.info().project.name === 'phone') {
+    // A real touch drag (Playwright's mouse would not show a scroll taking over).
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+    for (let i = 1; i <= 5; i++) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + i * 8, y }] });
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  } else {
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 40, y, { steps: 5 });
+    await page.mouse.up();
+  }
+  await expect.poll(async () => (await node.locator('rect').nth(1).boundingBox())!.x).not.toBe(before.x);
+  await flows.getByRole('button', { name: 'Reset layout' }).click();
+  await expect.poll(async () => (await node.locator('rect').nth(1).boundingBox())!.x).toBe(before.x);
   await flows.getByRole('button', { name: 'Show as table' }).click();
   const table = flows.getByTestId('flows-table');
   await expect(table.locator('tr', { hasText: 'Joint' }).filter({ hasText: 'Main Checking' })).toContainText('$1,000');

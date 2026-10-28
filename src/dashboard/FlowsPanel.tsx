@@ -1,15 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import SankeyDiagram from "../charts/SankeyDiagram";
-import {
-  buildSankey,
-  type FlowRow,
-  type SankeyGraph,
-  type SankeyNode,
-} from "../domain/flows";
-import { formatCentsWhole } from "../domain/money";
-import { OTHER } from "../domain/summary";
-import { supabase } from "../lib/supabase";
-import type { PanelProps } from "./panels";
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import SankeyDiagram from '../charts/SankeyDiagram';
+import { buildSankey, type FlowRow, type SankeyGraph, type SankeyNode } from '../domain/flows';
+import { formatCentsWhole } from '../domain/money';
+import { OTHER } from '../domain/summary';
+import { supabase } from '../lib/supabase';
+import type { PanelProps } from './panels';
 
 /** Flows below this share of the largest node are left out of the diagram (kept in the table). */
 const MIN_SHARE = 0.003;
@@ -24,7 +19,7 @@ export default function FlowsPanel({ model, fill }: PanelProps) {
   useEffect(() => {
     if (!from) return;
     let cancelled = false;
-    supabase.rpc("money_flows", { p_from: from, p_to: to }).then(({ data }) => {
+    supabase.rpc('money_flows', { p_from: from, p_to: to }).then(({ data }) => {
       if (!cancelled) setRows((data as FlowRow[]) ?? []);
     });
     return () => {
@@ -37,8 +32,8 @@ export default function FlowsPanel({ model, fill }: PanelProps) {
     if (!rows) return null;
     const accounts = new Map(model.accounts.map((a) => [a.id, a.name]));
     return buildSankey(rows, {
-      account: (id) => accounts.get(id) ?? "Account",
-      category: (id) => model.byId.get(id)?.name ?? "Category",
+      account: (id) => accounts.get(id) ?? 'Account',
+      category: (id) => model.byId.get(id)?.name ?? 'Category',
       series: model.series,
     });
   }, [rows, model.accounts, model.byId, model.series]);
@@ -51,50 +46,36 @@ export default function FlowsPanel({ model, fill }: PanelProps) {
     }
     return Math.max(0, ...totals.values());
   }, [graph]);
-  const drawn = useMemo(
-    () => (graph?.links ?? []).filter((l) => l.cents >= largest * MIN_SHARE),
-    [graph, largest],
-  );
+  const drawn = useMemo(() => (graph?.links ?? []).filter((l) => l.cents >= largest * MIN_SHARE), [graph, largest]);
   const hidden = (graph?.links.length ?? 0) - drawn.length;
 
-  const drawnGraph = useMemo(
-    () => (graph ? { ...graph, links: drawn } : null),
-    [graph, drawn],
-  );
+  const drawnGraph = useMemo(() => (graph ? { ...graph, links: drawn } : null), [graph, drawn]);
   const colorOf = useCallback(
     (n: SankeyNode) => {
-      if (n.role === "spend") {
+      if (n.role === 'spend') {
         const i = model.series.indexOf(n.group!);
-        return n.group === OTHER || i < 0
-          ? "var(--series-other)"
-          : `var(--series-${i + 1})`;
+        return n.group === OTHER || i < 0 ? 'var(--series-other)' : `var(--series-${i + 1})`;
       }
-      if (n.role === "transfer") return "var(--series-other)";
-      return "var(--chart-text)"; // income sources and accounts: neutral
+      if (n.role === 'transfer') return 'var(--series-other)';
+      return 'var(--chart-text)'; // income sources and accounts: neutral
     },
     [model.series],
   );
 
   if (!graph) return <p className="caption">Loading…</p>;
-  if (graph.links.length === 0)
-    return <p className="caption">No money movements in this period.</p>;
+  if (graph.links.length === 0) return <p className="caption">No money movements in this period.</p>;
 
-  const label = (key: string) =>
-    graph.nodes.find((n) => n.key === key)?.label ?? key;
+  const label = (key: string) => graph.nodes.find((n) => n.key === key)?.label ?? key;
   return (
     <div className="flows">
       <div className="flows-toggle">
         {hidden > 0 && !showTable && (
           <span className="flows-note">
-            {hidden} small flow{hidden === 1 ? "" : "s"} not drawn ·{" "}
+            {hidden} small flow{hidden === 1 ? '' : 's'} not drawn ·{' '}
           </span>
         )}
-        <button
-          className="link-like"
-          onClick={() => setShowTable(!showTable)}
-          aria-pressed={showTable}
-        >
-          {showTable ? "Show diagram" : "Show as table"}
+        <button className="link-like" onClick={() => setShowTable(!showTable)} aria-pressed={showTable}>
+          {showTable ? 'Show diagram' : 'Show as table'}
         </button>
       </div>
       {showTable ? (
@@ -113,7 +94,7 @@ export default function FlowsPanel({ model, fill }: PanelProps) {
                 .map((l) => (
                   <tr key={`${l.from}>${l.to}`}>
                     <td>{label(l.from)}</td>
-                    <td style={{ textAlign: "left" }}>{label(l.to)}</td>
+                    <td style={{ textAlign: 'left' }}>{label(l.to)}</td>
                     <td>{formatCentsWhole(l.cents)}</td>
                   </tr>
                 ))}
