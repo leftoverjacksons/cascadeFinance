@@ -433,11 +433,14 @@ const OTHER_MERCHANTS = 'merchant:*';
 
 /**
  * Key that identifies a merchant across transactions: the description as shown,
- * ignoring case, spacing and store numbers ("Kroger #123" = "KROGER").
+ * ignoring case, spacing, store numbers, website endings and words like
+ * "subscription" ("Kroger #123" = "KROGER", "Acme.com" = "Acme").
  */
 export function merchantKey(description: string): string {
   return description
     .toLowerCase()
+    .replace(/\.(com|net|org|io|ai|co|app)\b/g, ' ') // "Acme.com" = "Acme"
+    .replace(/\b(subscriptions?|inc|llc|ltd)\b\.?/g, ' ')
     .replace(/#\s*\w*\d\w*/g, ' ') // "#123", "#A12"
     .replace(/\b(store|no\.?)\s*\d+\b/g, ' ')
     .replace(/\s\d{3,}\b/g, ' ') // trailing store numbers

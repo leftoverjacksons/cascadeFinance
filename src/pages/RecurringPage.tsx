@@ -80,6 +80,9 @@ export default function RecurringPage() {
       <IonButton size="small" fill="outline" color="medium" onClick={() => void setRecurring(s, !isHidden)}>
         {isHidden ? 'Show again' : 'Not recurring'}
       </IonButton>
+      {!isHidden && (series ?? []).filter((x) => x.merchantKey === s.merchantKey).length > 1 && (
+        <IonNote className="hint"> Hides every series from this merchant.</IonNote>
+      )}
     </div>
   );
 
@@ -97,6 +100,7 @@ export default function RecurringPage() {
               <th>Per month</th>
               <th>Last</th>
               <th>Next</th>
+              <th>Account</th>
               <th>Category</th>
             </tr>
           </thead>
@@ -110,11 +114,12 @@ export default function RecurringPage() {
                   <td>{formatCentsWhole(s.monthlyCents)}</td>
                   <td>{formatDay(s.last)}</td>
                   <td className={s.overdue ? 'overdue' : ''}>{nextText(s)}</td>
+                  <td>{accountName(s.accountId)}</td>
                   <td>{categoryLabel(s.categoryId, byId)}</td>
                 </tr>
                 {open === s.key && (
                   <tr className="child">
-                    <td colSpan={7}>{details(s, isHidden)}</td>
+                    <td colSpan={8}>{details(s, isHidden)}</td>
                   </tr>
                 )}
               </Fragment>
@@ -131,7 +136,7 @@ export default function RecurringPage() {
               <IonLabel className="ion-text-wrap">
                 <h3>{s.label}</h3>
                 <p>
-                  {CADENCE_LABELS[s.cadence]} · next {nextText(s)}
+                  {CADENCE_LABELS[s.cadence]} · next {nextText(s)} · {accountName(s.accountId)}
                 </p>
               </IonLabel>
               <IonNote slot="end" className="amount">
@@ -173,8 +178,9 @@ export default function RecurringPage() {
               <p className="balance-line">About {formatCentsWhole(monthly)} a month</p>
               <p className="caption">
                 in {active.length} recurring charge{active.length === 1 ? '' : 's'} (subscriptions, bills, loans).
-                Found from charges to the same merchant at a steady pace; amounts that vary, like utilities, show
-                their typical charge. Click one for its history, or mark it as not recurring.
+                Found from charges to the same merchant at a steady pace; two subscriptions to one service (say,
+                one each) show separately. Amounts that vary, like utilities, show their typical charge. Click one
+                for its history, or mark it as not recurring.
               </p>
             </>
           )}

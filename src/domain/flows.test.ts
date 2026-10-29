@@ -304,6 +304,10 @@ describe('merchant level', () => {
     expect(merchantKey('  Kroger   Store 456 ')).toBe('kroger');
     expect(merchantKey("Trader Joe's 0123")).toBe("trader joe's");
     expect(merchantKey('H-E-B')).toBe('h e b');
+    // Website endings and words like "subscription" are not part of the name.
+    expect(merchantKey('Acme.com')).toBe(merchantKey('Acme'));
+    expect(merchantKey('Widget.ai Subscription')).toBe('widget');
+    expect(merchantKey('NETFLIX.COM')).toBe('netflix');
   });
 
   it('splits a category by merchant, refunds netted, labelled by the commonest spelling', () => {

@@ -31,6 +31,8 @@ describe('detectRecurring', () => {
 
   it('finds variable bills (utilities) and says they vary', () => {
     const bills = [
+      txn('2026-04-02', 88.1, 'Georgia Power'),
+      txn('2026-05-04', 79.6, 'Georgia Power'),
       txn('2026-06-03', 98.2, 'Georgia Power'),
       txn('2026-07-02', 141.75, 'GEORGIA POWER'),
       txn('2026-08-04', 162.1, 'Georgia Power'),
@@ -96,6 +98,57 @@ describe('detectRecurring', () => {
     // Today is late August, but this account was last imported on 2026-06-20.
     expect(detectRecurring(gym, () => '2026-06-20')[0].overdue).toBe(false);
     expect(detectRecurring(gym, () => '2026-08-20')[0].overdue).toBe(true);
+  });
+
+  it('splits two subscriptions to one service (one each), interleaved across accounts', () => {
+    const months = ['2025-08', '2025-09', '2025-10', '2025-11', '2025-12', '2026-01', '2026-02'];
+    const charges = [
+      ...months.map((m) => txn(`${m}-19`, 20, 'BotCo', 'joint')),
+      ...months.map((m) => txn(`${m}-23`, 20, 'BotCo', 'hers')),
+    ];
+    const found = detectRecurring(charges, '2026-02-25');
+    expect(found.map((s) => [s.cadence, s.accountId, s.transactions.length]).sort()).toEqual([
+      ['monthly', 'hers', 7],
+      ['monthly', 'joint', 7],
+    ]);
+    expect(new Set(found.map((s) => s.key)).size).toBe(2);
+    expect(found.every((s) => s.merchantKey === 'botco')).toBe(true);
+  });
+
+  it('splits two subscriptions billed a few days apart from the same account', () => {
+    const months = ['2026-04', '2026-05', '2026-06', '2026-07'];
+    const charges = [...months.map((m) => txn(`${m}-20`, 20, 'BotCo')), ...months.map((m) => txn(`${m}-23`, 20, 'BotCo'))];
+    expect(detectRecurring(charges, '2026-07-25').map((s) => s.cadence)).toEqual(['monthly', 'monthly']);
+  });
+
+  it('keeps a subscription that moves to another account as one series', () => {
+    const charges = [
+      ...['2026-01', '2026-02', '2026-03'].map((m) => txn(`${m}-07`, 20, 'BotCo', 'joint')),
+      ...['2026-04', '2026-05', '2026-06'].map((m) => txn(`${m}-07`, 20, 'BotCo', 'his')),
+    ];
+    const found = detectRecurring(charges, '2026-06-10');
+    expect(found).toHaveLength(1);
+    expect(found[0].transactions).toHaveLength(6);
+  });
+
+  it('still ignores frequent shopping at one store', () => {
+    const days = [2, 5, 9, 16, 17, 23, 30, 38, 41, 44, 52, 60, 61, 66, 75, 79, 88, 90, 101, 103, 115, 118];
+    const shopping = days.map((d, i) =>
+      txn(new Date(Date.UTC(2026, 0, 1) + d * 86_400_000).toISOString().slice(0, 10), 20 + (i % 7) * 9, 'MegaMart'),
+    );
+    expect(detectRecurring(shopping, '2026-05-01')).toEqual([]);
+  });
+
+  it('needs a long history before calling varying amounts a bill', () => {
+    // Three bakery visits about a month apart, different amounts: not a bill.
+    const visits = [txn('2026-07-10', 18.4, 'Bakery'), txn('2026-08-09', 26.1, 'Bakery'), txn('2026-09-08', 21.0, 'Bakery')];
+    expect(detectRecurring(visits, '2026-09-20')).toEqual([]);
+  });
+
+  it('leaves out series that stopped more than a year ago', () => {
+    const old = monthly('OldApp', 9.99, ['2025-03', '2025-04', '2025-05', '2025-06']);
+    expect(detectRecurring(old, '2026-10-01')).toEqual([]);
+    expect(detectRecurring(old, '2026-05-01')[0].overdue).toBe(true); // within the year: "may have stopped"
   });
 });
 

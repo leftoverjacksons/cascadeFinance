@@ -66,21 +66,21 @@ export function useRecurring() {
     const today = todayLocal();
     const found = detectRecurring(spending, (account) => newest.get(account) ?? today);
     return {
-      series: found.filter((s) => !dismissed.has(s.key)),
-      hidden: found.filter((s) => dismissed.has(s.key)),
+      series: found.filter((s) => !dismissed.has(s.merchantKey)),
+      hidden: found.filter((s) => dismissed.has(s.merchantKey)),
     };
   }, [rows, byTxn, byId, dismissed]);
 
   const dismiss = useCallback(
     async (s: RecurringSeries, notRecurring: boolean) => {
       const { error } = notRecurring
-        ? await supabase.from('recurring_dismissals').insert({ household_id: household.id, merchant_key: s.key })
-        : await supabase.from('recurring_dismissals').delete().eq('merchant_key', s.key);
+        ? await supabase.from('recurring_dismissals').insert({ household_id: household.id, merchant_key: s.merchantKey })
+        : await supabase.from('recurring_dismissals').delete().eq('merchant_key', s.merchantKey);
       if (error) return error.message;
       setDismissed((d) => {
         const next = new Set(d);
-        if (notRecurring) next.add(s.key);
-        else next.delete(s.key);
+        if (notRecurring) next.add(s.merchantKey);
+        else next.delete(s.merchantKey);
         return next;
       });
       return null;
