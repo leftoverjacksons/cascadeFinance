@@ -26,6 +26,7 @@ import { DESKTOP_QUERY } from './layout/useMediaQuery';
 import { NAV_ITEMS } from './layout/nav';
 import Sidebar from './layout/Sidebar';
 import { useOverlayAriaFix } from './layout/useOverlayAriaFix';
+import RecurringPage from './pages/RecurringPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import RulesPage from './pages/RulesPage';
 import SettingsPage from './pages/SettingsPage';
@@ -62,6 +63,7 @@ function MainTabs() {
               <Route exact path="/transactions" component={TransactionsPage} />
               <Route exact path="/transfers" component={TransfersPage} />
               <Route exact path="/shared" component={SharedPage} />
+              <Route exact path="/recurring" component={RecurringPage} />
               <Route exact path="/import" component={ImportPage} />
               <Route exact path="/accounts" component={AccountsPage} />
               <Route exact path="/settings" component={SettingsPage} />

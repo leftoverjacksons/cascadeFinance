@@ -831,3 +831,17 @@ button.sort {
 .flows-zoom > :first-child::before {
   content: none;
 }
+
+.recurring-table td.overdue {
+  color: var(--ion-color-warning-shade);
+}
+
+.recurring-details {
+  padding: 4px 0 8px;
+  width: 100%;
+}
+
+.recurring-details .data-table {
+  max-width: 320px;
+  margin-bottom: 8px;
+}

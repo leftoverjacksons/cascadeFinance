@@ -236,7 +236,7 @@ Model:
 | 4 — Overview ✅ | Transactions list (search/filter), monthly cash flow, spending by category, balances, net worth. |
 | 5 — More formats | Credit card formats, savings, loans + balance snapshots. |
 | 5a — Shared expenses ✅ | Part 1: transfer linking + money-flow Sankey. Part 2: shared expenses, paybacks (direct and via joint), recorded payments, member balance. |
-| 6 — Budgets & trends | After ~2–3 months of categorised data: per-category monthly targets vs actuals; recurring-charge detection. |
+| 6 — Budgets & trends | Recurring-charge detection ✅ (2026-10-29). Per-category monthly targets vs actuals: after ~2–3 months of categorised data. |
 | 7 — Mobile polish | PWA install, offline read cache, phone-first import flow. (No separate native app planned.) |
 
 ## 10a. Implementation status
@@ -334,6 +334,14 @@ Model:
 - **Accessibility bug fixed:** closing a dialog that contained a dropdown (e.g. account owner, import account) left `aria-hidden` on the router outlet, hiding the whole app from screen readers. A global handler clears it once no overlay is open; regression-tested. (This was the cause of an earlier "flaky" test previously attributed to Playwright.)
 - Tests: 19 new pgTAP tests (153 total) incl. import-order independence; 5 new unit tests; Playwright shared scenario.
 
+**Recurring charges (Phase 6, part 1, 2026-10-29):**
+- Detection runs in the app (`src/domain/recurring.ts`) over 26 months of posted money out, grouped by merchant (`merchantKey`, as on the money-flow diagram). Left out: transfers between the household's accounts (linked), transfer-kind categories (e.g. card payments) and income. Mortgage and car-loan payments count (they are spending, §11).
+- A merchant is recurring when at least 75 % of the gaps between its charge days fit one cadence: weekly (5–9 days), every 2 weeks (12–16), monthly (26–35), quarterly (80–100) or yearly (350–380); at least 3 charges (2 for yearly). Several charges on one day are one occasion. Amounts may vary ("about $X", e.g. utilities) and are flagged when any charge differs from the typical (median) one by more than 10 %.
+- Per series: typical amount, cost per month, first/last charge, next expected (last + cadence) and "may have stopped" when the next charge is overdue by more than half a cadence, judged against the newest imported data for that account (not today), so a stale import does not make everything look stopped.
+- "Not recurring" hides a series (`recurring_dismissals`, per household, by merchant key); hidden series are listed and can be shown again.
+- Recurring page (sidebar; on phones via the Overview panel) and a Recurring charges panel (monthly total, next 30 days).
+- Checked locally against a real export (not stored in the repository): it finds the expected subscriptions and bills and flags lapsed ones. Known false-positive patterns: two equal charges about a year apart look yearly; habitual weekly visits to one shop look weekly. Both are what "Not recurring" is for.
+
 ## 11. Open questions
 
 1. **Credit card samples** (tabled): one export each from Amex, Discover, IKEA card; Member 1's cards, if any.
@@ -400,3 +408,4 @@ Model:
 | 2026-10-28 | Money flow coloured by person; optional people view | Household choice among three mock-ups; people view reduces structural crossings | Accepted |
 | 2026-10-28 | Money flow: zoom into a spending node (categories within it) | Household request | Accepted |
 | 2026-10-29 | Money flow zoom continues to merchants below the lowest category | Household request | Accepted |
+| 2026-10-29 | Recurring charges detected in the app from transaction history; household can hide false positives | No extra data to maintain; detection can improve without migrations | Accepted |

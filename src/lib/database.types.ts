@@ -219,6 +219,26 @@ isOneToOne: false
       referencedColumns: ["household_id","user_id"]
     }
                   ]
+                },"recurring_dismissals": {
+                  Row: {
+                    "created_at": string,"created_by": string | null,"household_id": string,"merchant_key": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"created_by"?: string | null,"household_id": string,"merchant_key": string
+                  }
+                  Update: {
+                    "created_at"?: string,"created_by"?: string | null,"household_id"?: string,"merchant_key"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "recurring_dismissals_household_id_fkey"
+      columns: ["household_id"]
+isOneToOne: false
+      referencedRelation: "households"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"settlement_overrides": {
                   Row: {
                     "created_at": string,"household_id": string,"is_settlement": boolean,"out_txn_id": string

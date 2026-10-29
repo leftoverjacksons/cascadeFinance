@@ -60,7 +60,7 @@ describe('sanitizeLayout', () => {
 
   it('treats layouts saved before `seen` existed as knowing only the first seven panels', () => {
     const old = { version: 1, items: [{ i: 'kpis', x: 0, y: 0, w: 12, h: 2 }] };
-    expect(sanitizeLayout(old, known).map((it) => it.i)).toEqual(['kpis', 'flows', 'shared']);
+    expect(sanitizeLayout(old, known).map((it) => it.i)).toEqual(['kpis', 'flows', 'shared', 'recurring']);
   });
 });
 
@@ -69,7 +69,7 @@ describe('add/remove/hidden', () => {
     const without = removePanel(DEFAULT_LAYOUT, 'netWorth');
     expect(hiddenPanels(without, known)).toEqual(['netWorth']);
     const back = addPanel(without, 'netWorth');
-    expect(back[back.length - 1]).toEqual({ i: 'netWorth', x: 0, y: 23, w: 6, h: 5 });
+    expect(back[back.length - 1]).toEqual({ i: 'netWorth', x: 0, y: 28, w: 6, h: 5 });
     expect(addPanel(back, 'netWorth')).toBe(back);
   });
 });

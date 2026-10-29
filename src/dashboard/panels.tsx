@@ -7,6 +7,7 @@ import { formatCents, formatCentsCompact, formatCentsWhole } from '../domain/mon
 import { OTHER, UNCATEGORIZED, type MonthSummary } from '../domain/summary';
 import { averageOf, groupValue, monthLabel, TOP_GROUPS, type DashboardModel } from './model';
 import FlowsPanel from './FlowsPanel';
+import RecurringPanel from './RecurringPanel';
 import SharedPanel from './SharedPanel';
 import TransactionsPanel from './TransactionsPanel';
 
@@ -389,6 +390,13 @@ export const PANELS: PanelDef[] = [
     caption: () => 'Shared spending each of you paid, and who owes whom.',
     mobile: true,
     Body: SharedPanel,
+  },
+  {
+    id: 'recurring',
+    title: 'Recurring charges',
+    caption: () => 'Subscriptions, bills and loans that repeat; what is due next.',
+    mobile: true,
+    Body: RecurringPanel,
   },
   {
     id: 'transactions',
