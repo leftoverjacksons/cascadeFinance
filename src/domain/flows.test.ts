@@ -4,7 +4,10 @@ import {
   buildSankey,
   buildZoom,
   canZoom,
+  buildMerchants,
   layoutSankey,
+  MAX_MERCHANTS,
+  merchantKey,
   netTransfers,
   zoomPath,
   type FlowRow,
@@ -289,6 +292,67 @@ describe('zoomPath', () => {
     expect(canZoom('pets', categories)).toBe(true);
     expect(canZoom('gifts', categories)).toBe(false);
     expect(canZoom('vet', categories)).toBe(false);
+  });
+});
+
+describe('merchant level', () => {
+  const groceries = { key: 'sub:groc', label: 'Groceries', role: 'spend' as const, group: 'food' };
+
+  it('treats spellings and store numbers of one merchant as the same merchant', () => {
+    expect(merchantKey('Kroger #123')).toBe('kroger');
+    expect(merchantKey('KROGER')).toBe('kroger');
+    expect(merchantKey('  Kroger   Store 456 ')).toBe('kroger');
+    expect(merchantKey("Trader Joe's 0123")).toBe("trader joe's");
+    expect(merchantKey('H-E-B')).toBe('h e b');
+  });
+
+  it('splits a category by merchant, refunds netted, labelled by the commonest spelling', () => {
+    const { graph, merchants } = buildMerchants(
+      groceries,
+      [
+        { category_id: 'groc', amount_cents: -6000, display_description: 'Kroger' },
+        { category_id: 'groc', amount_cents: -2000, display_description: 'KROGER #12' },
+        { category_id: 'groc', amount_cents: 1000, display_description: 'Kroger' },
+        { category_id: 'groc', amount_cents: -3000, display_description: 'Publix' },
+        { category_id: 'groc', amount_cents: -500, display_description: 'Aldi' },
+        { category_id: 'groc', amount_cents: 500, display_description: 'Aldi' },
+      ],
+      ['groc'],
+    );
+    expect(graph.links.map((l) => [graph.nodes.find((n) => n.key === l.to)!.label, l.cents])).toEqual([
+      ['Kroger', 7000],
+      ['Publix', 3000],
+    ]);
+    expect(merchants!.get('merchant:kroger')).toEqual(['kroger']);
+  });
+
+  it(`shows the largest ${MAX_MERCHANTS} merchants and combines the rest`, () => {
+    const many = Array.from({ length: MAX_MERCHANTS + 3 }, (_, i) => ({
+      category_id: 'groc',
+      amount_cents: -(1000 + i),
+      display_description: `Shop ${String.fromCharCode(65 + i)}`,
+    }));
+    const { graph, merchants } = buildMerchants(groceries, many, ['groc']);
+    expect(graph.links).toHaveLength(MAX_MERCHANTS + 1);
+    const other = graph.nodes.find((n) => n.key === 'merchant:*')!;
+    expect(other.label).toBe('Other merchants (3)');
+    expect(merchants!.get('merchant:*')!.sort()).toEqual(['shop a', 'shop b', 'shop c']); // the three smallest
+    expect(graph.links.reduce((t, l) => t + l.cents, 0)).toBe(many.reduce((t, x) => t - x.amount_cents, 0));
+  });
+
+  it('is reached through a zoom path step marked byMerchant', () => {
+    const z = zoomPath(
+      [
+        { node: { key: 'spend:food', label: 'Food & Dining', role: 'spend', group: 'food' } },
+        { node: groceries, categoryIds: ['groc'], byMerchant: true },
+      ],
+      [
+        { category_id: 'groc', amount_cents: -6000, display_description: 'Kroger' },
+        { category_id: 'rest', amount_cents: -4000, display_description: 'Diner' },
+      ],
+      new Map(),
+    );
+    expect(z.graph.links.map((l) => l.to)).toEqual(['merchant:kroger']);
   });
 });
 

@@ -352,12 +352,16 @@ export function layoutSankey(graph: SankeyGraph): SankeyLayout {
 export interface ZoomTransaction {
   category_id: string | null;
   amount_cents: number;
+  /** Merchant as shown (the cleaned or renamed description); needed for the merchant level. */
+  display_description?: string;
 }
 
 export interface ZoomGraph {
   graph: SankeyGraph;
-  /** For each subcategory node, the categories whose transactions it holds (for listing them). */
+  /** For each part node, the categories whose transactions it holds (for listing them). */
   categoryIds: Map<string, string[]>;
+  /** Merchant level only: for each merchant node, the merchant keys it holds (see merchantKey). */
+  merchants?: Map<string, string[]>;
 }
 
 /**
@@ -403,6 +407,8 @@ export function buildZoom(
 export interface ZoomStep {
   node: SankeyNode;
   categoryIds?: string[];
+  /** Split by merchant (a lowest-level category) rather than by category. */
+  byMerchant?: boolean;
 }
 
 /**
@@ -417,11 +423,67 @@ export function zoomPath(
 ): ZoomGraph {
   const last = path[path.length - 1];
   const within = last.categoryIds ? new Set(last.categoryIds) : null;
-  return buildZoom(
-    last.node,
-    within ? transactions.filter((t) => t.category_id && within.has(t.category_id)) : transactions,
-    categories,
-  );
+  const mine = within ? transactions.filter((t) => t.category_id && within.has(t.category_id)) : transactions;
+  return last.byMerchant ? buildMerchants(last.node, mine, last.categoryIds ?? []) : buildZoom(last.node, mine, categories);
+}
+
+/** Merchants shown individually; the rest are combined. */
+export const MAX_MERCHANTS = 12;
+const OTHER_MERCHANTS = 'merchant:*';
+
+/**
+ * Key that identifies a merchant across transactions: the description as shown,
+ * ignoring case, spacing and store numbers ("Kroger #123" = "KROGER").
+ */
+export function merchantKey(description: string): string {
+  return description
+    .toLowerCase()
+    .replace(/#\s*\w*\d\w*/g, ' ') // "#123", "#A12"
+    .replace(/\b(store|no\.?)\s*\d+\b/g, ' ')
+    .replace(/\s\d{3,}\b/g, ' ') // trailing store numbers
+    .replace(/[^\p{L}\p{N}&' ]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * A lowest-level category split by merchant: the largest MAX_MERCHANTS by
+ * amount each get a node, the rest are combined. Refunds net off; merchants
+ * that come to nothing or less are left out.
+ */
+export function buildMerchants(root: SankeyNode, transactions: ZoomTransaction[], categoryIds: string[]): ZoomGraph {
+  const totals = new Map<string, number>();
+  const spellings = new Map<string, Map<string, number>>(); // key -> shown name -> cents
+  for (const t of transactions) {
+    const shown = (t.display_description ?? '').trim() || 'Unknown';
+    const key = merchantKey(shown) || shown.toLowerCase();
+    totals.set(key, (totals.get(key) ?? 0) - t.amount_cents);
+    const names = spellings.get(key) ?? new Map<string, number>();
+    names.set(shown, (names.get(shown) ?? 0) - t.amount_cents);
+    spellings.set(key, names);
+  }
+  const ranked = [...totals].filter(([, cents]) => cents > 0).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const rootKey = `zoom:${root.key}`;
+  const nodes: SankeyNode[] = [{ key: rootKey, label: root.label, role: 'spend', group: root.group }];
+  const links: SankeyLink[] = [];
+  const merchants = new Map<string, string[]>();
+  const ids = new Map<string, string[]>();
+  for (const [key, cents] of ranked.slice(0, MAX_MERCHANTS)) {
+    const label = [...spellings.get(key)!].sort((a, b) => b[1] - a[1])[0][0];
+    const nodeKey = `merchant:${key}`;
+    nodes.push({ key: nodeKey, label, role: 'spend', group: root.group });
+    links.push({ from: rootKey, to: nodeKey, cents });
+    merchants.set(nodeKey, [key]);
+    ids.set(nodeKey, categoryIds);
+  }
+  const rest = ranked.slice(MAX_MERCHANTS);
+  if (rest.length) {
+    nodes.push({ key: OTHER_MERCHANTS, label: `Other merchants (${rest.length})`, role: 'spend', group: root.group });
+    links.push({ from: rootKey, to: OTHER_MERCHANTS, cents: rest.reduce((t, [, c]) => t + c, 0) });
+    merchants.set(OTHER_MERCHANTS, rest.map(([key]) => key));
+    ids.set(OTHER_MERCHANTS, categoryIds);
+  }
+  return { graph: { nodes, links }, categoryIds: ids, merchants };
 }
 
 /** Whether a spending part can be zoomed into: a group that has categories. */

@@ -166,11 +166,6 @@ test('transfers between accounts are linked, reviewable, and shown as money flow
   await expect(flows.getByTestId('flows-zoom')).toContainText('Food & Dining');
   await expect(flows.getByTestId('sankey')).toContainText('Groceries');
   await expect(flows.getByTestId('sankey')).toContainText('Coffee Shops');
-  // Groceries is a lowest-level category: nothing further to zoom into.
-  const groceryNode = flows.locator('.sankey-node', { hasText: 'Groceries' }).locator('rect').nth(1);
-  if (test.info().project.name === 'phone') await groceryNode.tap({ force: true });
-  else await groceryNode.click({ button: 'right', force: true });
-  await expect(flows.getByRole('menuitem', { name: 'Zoom in' })).toHaveCount(0);
   // A part's tail lists only its own transactions.
   await flows.locator('.sankey-node', { hasText: 'Groceries' }).waitFor();
   const groceries = await flows.evaluate((panel) => {
@@ -180,6 +175,29 @@ test('transfers between accounts are linked, reviewable, and shown as money flow
   await flows.locator(`path[data-link$=">${groceries}"]`).dispatchEvent('click');
   await expect(list.getByTestId('transactions-panel')).toContainText('Kroger');
   await expect(list.getByTestId('transactions-panel')).not.toContainText('Corner Cafe'); // Coffee Shops
+
+  // Groceries is a lowest-level category: zooming in splits it by merchant.
+  const openMenu = async (name: string) => {
+    const rect = flows.locator('.sankey-node', { hasText: name }).locator('rect').nth(1);
+    if (test.info().project.name === 'phone') await rect.tap({ force: true });
+    else await rect.click({ button: 'right', force: true });
+  };
+  await openMenu('Groceries');
+  await flows.getByRole('menuitem', { name: 'Zoom in' }).click();
+  await expect(flows.getByTestId('flows-zoom')).toContainText('Food & Dining'); // breadcrumb
+  await expect(flows.getByTestId('flows-zoom')).toContainText('Groceries');
+  await expect(flows.getByTestId('sankey')).toContainText('Kroger');
+  await flows.locator('path[data-link$=">merchant:kroger"]').dispatchEvent('click');
+  await expect(list.getByTestId('transactions-flow-filter')).toContainText('Groceries → Kroger');
+  await expect(list.getByTestId('transactions-panel')).toContainText('Kroger');
+  await expect(list.getByTestId('transactions-panel')).not.toContainText('Publix'); // same category, other merchant
+  // Merchants are the lowest level.
+  await openMenu('Kroger');
+  await expect(flows.getByRole('menuitem', { name: 'Zoom in' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  // The breadcrumb zooms back out one step.
+  await flows.getByTestId('flows-zoom').getByRole('button', { name: 'Food & Dining' }).click();
+  await expect(flows.getByTestId('sankey')).toContainText('Coffee Shops');
   await flows.getByRole('button', { name: '← All money' }).click();
   await expect(flows.getByTestId('flows-zoom')).toHaveCount(0);
   await expect(flows.getByTestId('sankey')).toContainText('Main Checking');

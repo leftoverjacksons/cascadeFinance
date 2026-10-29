@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import TransactionModal from '../components/TransactionModal';
 import { categoryLabel } from '../domain/categories';
 import { formatDay } from '../domain/dates';
+import { merchantKey } from '../domain/flows';
 import { formatCents } from '../domain/money';
 import { useAccounts } from '../household/useAccounts';
 import { useCategories } from '../household/useCategories';
@@ -38,7 +39,12 @@ export default function TransactionsPanel({ onDataChanged, flow, onFlow }: Panel
         p_targets: flow.rows.map((r) => r.target),
       });
       if (flow.categoryIds) q = q.in('category_id', flow.categoryIds);
-      const { data } = await q.limit(LIMIT);
+      let { data } = await (flow.merchants ? q : q.limit(LIMIT));
+      // Merchants are matched here (by the same key the diagram groups them by).
+      if (flow.merchants) {
+        const wanted = new Set(flow.merchants);
+        data = (data ?? []).filter((t) => wanted.has(merchantKey(t.display_description))).slice(0, LIMIT);
+      }
       if (id === requestId.current) setRows(data ?? []);
       return;
     }

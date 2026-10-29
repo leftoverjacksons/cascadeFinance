@@ -33,6 +33,8 @@ export interface FlowSelection {
   rows: FlowRow[];
   /** Only transactions in these categories (a zoomed-in view's subcategory). */
   categoryIds?: string[];
+  /** Only transactions from these merchants (merchantKey of their description). */
+  merchants?: string[];
 }
 
 export interface PanelDef {

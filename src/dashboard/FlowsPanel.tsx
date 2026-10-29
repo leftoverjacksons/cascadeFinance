@@ -214,8 +214,12 @@ export default function FlowsPanel(props: PanelProps) {
           : [];
       }
       const id = n.key.startsWith('sub:') ? n.key.slice('sub:'.length) : null;
-      if (!id || !zoomed || !canZoom(id, model.byId)) return [];
-      const step = { node: { ...n, group: id }, categoryIds: zoomed.categoryIds.get(n.key) };
+      if (!id || !zoomed) return []; // merchants: the lowest level
+      const categoryIds = zoomed.categoryIds.get(n.key);
+      // A group with categories splits into them; a lowest-level category into its merchants.
+      const step = canZoom(id, model.byId)
+        ? { node: { ...n, group: id }, categoryIds }
+        : { node: n, categoryIds, byMerchant: true };
       return [{ label: 'Zoom in', run: () => zoomTo([...path, step]) }];
     },
     [zoom, zoomed, path, zoomTo, model.byId],
@@ -301,7 +305,11 @@ export default function FlowsPanel(props: PanelProps) {
         to,
         // Zoomed in: the node's transactions, narrowed to the part's categories.
         ...(zoom && zoomed && fetched
-          ? { rows: fetched.rows, categoryIds: zoomed.categoryIds.get(link.to) ?? [] }
+          ? {
+              rows: fetched.rows,
+              categoryIds: zoomed.categoryIds.get(link.to) ?? [],
+              merchants: zoomed.merchants?.get(link.to),
+            }
           : { rows: shown.rowsByLink?.get(key) ?? [] }),
       });
     },
