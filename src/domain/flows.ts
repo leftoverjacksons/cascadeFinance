@@ -398,3 +398,34 @@ export function buildZoom(
   }
   return { graph: { nodes, links }, categoryIds };
 }
+
+/** One step of a zoom path: the node zoomed into, and (below the first) the categories it holds. */
+export interface ZoomStep {
+  node: SankeyNode;
+  categoryIds?: string[];
+}
+
+/**
+ * The zoomed-in view at the end of a path (e.g. Other spending -> Pets), from
+ * the transactions behind the first step's node: each further step narrows
+ * them to its categories.
+ */
+export function zoomPath(
+  path: ZoomStep[],
+  transactions: ZoomTransaction[],
+  categories: Map<string, { name: string; parent_id: string | null }>,
+): ZoomGraph {
+  const last = path[path.length - 1];
+  const within = last.categoryIds ? new Set(last.categoryIds) : null;
+  return buildZoom(
+    last.node,
+    within ? transactions.filter((t) => t.category_id && within.has(t.category_id)) : transactions,
+    categories,
+  );
+}
+
+/** Whether a spending part can be zoomed into: a group that has categories. */
+export function canZoom(groupId: string, categories: Map<string, { parent_id: string | null }>): boolean {
+  for (const c of categories.values()) if (c.parent_id === groupId) return true;
+  return false;
+}

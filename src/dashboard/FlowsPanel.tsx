@@ -4,11 +4,13 @@ import { useAuth } from '../auth/AuthProvider';
 import SankeyDiagram, { type SankeyPositions, type SankeyStacks } from '../charts/SankeyDiagram';
 import {
   buildSankey,
-  buildZoom,
+  canZoom,
   type FlowRow,
   type SankeyGraph,
   type SankeyNode,
-  type ZoomGraph,
+  type ZoomStep,
+  type ZoomTransaction,
+  zoomPath,
 } from '../domain/flows';
 import { formatCents, formatCentsWhole } from '../domain/money';
 import { OTHER, UNCATEGORIZED } from '../domain/summary';
@@ -120,9 +122,12 @@ export default function FlowsPanel(props: PanelProps) {
   const [showTable, setShowTable] = useState(false);
   const [view, setView] = useState<FlowView>(storedView);
   const [layout, setLayout] = useSavedLayout();
-  // Zoomed into a spending node: that node and what it is made of.
-  const [zoom, setZoom] = useState<SankeyNode | null>(null);
-  const [zoomed, setZoomed] = useState<(ZoomGraph & { rows: FlowRow[] }) | null>(null);
+  // Zoomed into a spending node, and possibly further into one of its parts
+  // (e.g. Other spending -> Pets): each step shows a node and what it is made of.
+  const [path, setPath] = useState<ZoomStep[]>([]);
+  const [fetched, setFetched] = useState<{ transactions: ZoomTransaction[]; rows: FlowRow[] } | null>(null);
+  const zoom = path.at(-1)?.node ?? null;
+  const top = path[0]?.node ?? null;
   const from = model.shown[0]?.month;
   const to = model.data.today;
 
@@ -161,12 +166,12 @@ export default function FlowsPanel(props: PanelProps) {
     });
   }, [rows, model.accounts, model.byId, model.series, members, view, personOf]);
 
-  // Zoom: fetch the transactions behind the node (every flow into it) and split them.
+  // Zoom: fetch the transactions behind the first step's node (every flow into it).
   useEffect(() => {
-    setZoomed(null);
-    if (!zoom || !graph || !from) return;
-    const node = graph.nodes.find((n) => n.key === zoom.key);
-    if (!node) return setZoom(null); // gone in this period or view
+    setFetched(null);
+    if (!top || !graph || !from) return;
+    const node = graph.nodes.find((n) => n.key === top.key);
+    if (!node) return setPath([]); // gone in this period or view
     const rows = graph.links
       .filter((l) => l.to === node.key)
       .flatMap((l) => graph.rowsByLink?.get(`${l.from}>${l.to}`) ?? []);
@@ -180,25 +185,40 @@ export default function FlowsPanel(props: PanelProps) {
         p_targets: rows.map((r) => r.target),
       })
       .then(({ data }) => {
-        if (!cancelled) setZoomed({ ...buildZoom(node, data ?? [], model.byId), rows });
+        if (!cancelled) setFetched({ transactions: data ?? [], rows });
       });
     return () => {
       cancelled = true;
     };
-  }, [zoom, graph, from, to, model.byId]);
+  }, [top, graph, from, to]);
+  const zoomed = useMemo(
+    () => (path.length && fetched ? zoomPath(path, fetched.transactions, model.byId) : null),
+    [path, fetched, model.byId],
+  );
   const shown = zoom ? (zoomed?.graph ?? null) : graph;
-  const zoomInto = useCallback(
-    (node: SankeyNode | null) => {
+  /** Show the first `depth` steps of the path (0: all money). */
+  const zoomTo = useCallback(
+    (next: ZoomStep[]) => {
       onFlow(null);
-      setZoom(node);
+      setPath(next);
     },
     [onFlow],
   );
-  // Spending groups (and "Other spending") can be zoomed into; not Uncategorized.
+  // From all money: spending groups and "Other spending" (not Uncategorized).
+  // Zoomed in: parts that are groups with categories of their own.
   const nodeActions = useCallback(
-    (n: SankeyNode) =>
-      !zoom && n.role === 'spend' && n.group !== UNCATEGORIZED ? [{ label: 'Zoom in', run: () => zoomInto(n) }] : [],
-    [zoom, zoomInto],
+    (n: SankeyNode) => {
+      if (!zoom) {
+        return n.role === 'spend' && n.group !== UNCATEGORIZED
+          ? [{ label: 'Zoom in', run: () => zoomTo([{ node: n }]) }]
+          : [];
+      }
+      const id = n.key.startsWith('sub:') ? n.key.slice('sub:'.length) : null;
+      if (!id || !zoomed || !canZoom(id, model.byId)) return [];
+      const step = { node: { ...n, group: id }, categoryIds: zoomed.categoryIds.get(n.key) };
+      return [{ label: 'Zoom in', run: () => zoomTo([...path, step]) }];
+    },
+    [zoom, zoomed, path, zoomTo, model.byId],
   );
 
   function changeView(next: FlowView) {
@@ -280,16 +300,16 @@ export default function FlowsPanel(props: PanelProps) {
         from,
         to,
         // Zoomed in: the node's transactions, narrowed to the part's categories.
-        ...(zoom && zoomed
-          ? { rows: zoomed.rows, categoryIds: zoomed.categoryIds.get(link.to) ?? [] }
+        ...(zoom && zoomed && fetched
+          ? { rows: fetched.rows, categoryIds: zoomed.categoryIds.get(link.to) ?? [] }
           : { rows: shown.rowsByLink?.get(key) ?? [] }),
       });
     },
-    [shown, zoom, zoomed, from, to, onFlow],
+    [shown, zoom, zoomed, fetched, from, to, onFlow],
   );
 
   const zoomOut = (
-    <button className="link-like" onClick={() => zoomInto(null)}>
+    <button className="link-like" onClick={() => zoomTo([])}>
       ← All money
     </button>
   );
@@ -319,6 +339,12 @@ export default function FlowsPanel(props: PanelProps) {
         {zoom ? (
           <span className="flows-zoom" data-testid="flows-zoom">
             {zoomOut}
+            {/* Breadcrumbs: earlier steps zoom back out to them. */}
+            {path.slice(0, -1).map((step, i) => (
+              <button key={step.node.key} className="link-like" onClick={() => zoomTo(path.slice(0, i + 1))}>
+                {step.node.label}
+              </button>
+            ))}
             <strong>
               {zoom.label} · {formatCentsWhole(shown.links.reduce((t, l) => t + l.cents, 0))}
             </strong>

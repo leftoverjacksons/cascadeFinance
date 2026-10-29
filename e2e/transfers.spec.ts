@@ -166,6 +166,11 @@ test('transfers between accounts are linked, reviewable, and shown as money flow
   await expect(flows.getByTestId('flows-zoom')).toContainText('Food & Dining');
   await expect(flows.getByTestId('sankey')).toContainText('Groceries');
   await expect(flows.getByTestId('sankey')).toContainText('Coffee Shops');
+  // Groceries is a lowest-level category: nothing further to zoom into.
+  const groceryNode = flows.locator('.sankey-node', { hasText: 'Groceries' }).locator('rect').nth(1);
+  if (test.info().project.name === 'phone') await groceryNode.tap({ force: true });
+  else await groceryNode.click({ button: 'right', force: true });
+  await expect(flows.getByRole('menuitem', { name: 'Zoom in' })).toHaveCount(0);
   // A part's tail lists only its own transactions.
   await flows.locator('.sankey-node', { hasText: 'Groceries' }).waitFor();
   const groceries = await flows.evaluate((panel) => {

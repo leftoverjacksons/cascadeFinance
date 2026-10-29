@@ -820,3 +820,14 @@ button.sort {
   align-items: baseline;
   color: var(--chart-text);
 }
+
+.flows-zoom > * + *::before {
+  content: '/';
+  margin-right: 10px;
+  color: var(--chart-text);
+  opacity: 0.6;
+}
+
+.flows-zoom > :first-child::before {
+  content: none;
+}

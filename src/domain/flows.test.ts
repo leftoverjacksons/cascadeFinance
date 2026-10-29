@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { breakCycles, buildSankey, buildZoom, layoutSankey, netTransfers, type FlowRow } from './flows';
+import {
+  breakCycles,
+  buildSankey,
+  buildZoom,
+  canZoom,
+  layoutSankey,
+  netTransfers,
+  zoomPath,
+  type FlowRow,
+} from './flows';
 import { OTHER } from './summary';
 
 const names = {
@@ -243,3 +252,43 @@ describe('buildZoom', () => {
     expect(graph.links).toEqual([]);
   });
 });
+
+describe('zoomPath', () => {
+  const categories = new Map([
+    ['pets', { name: 'Pets', parent_id: null }],
+    ['vet', { name: 'Vet', parent_id: 'pets' }],
+    ['food', { name: 'Pet Food', parent_id: 'pets' }],
+    ['gifts', { name: 'Gifts', parent_id: null }],
+  ]);
+  const transactions = [
+    { category_id: 'vet', amount_cents: -20000 },
+    { category_id: 'food', amount_cents: -5000 },
+    { category_id: 'gifts', amount_cents: -3000 },
+  ];
+  const other = { key: 'spend:other', label: 'Other spending', role: 'spend' as const, group: OTHER };
+
+  it('zooms again: Other spending -> Pets -> its categories', () => {
+    const first = zoomPath([{ node: other }], transactions, categories);
+    expect(first.graph.links.map((l) => [l.to, l.cents])).toEqual([
+      ['sub:pets', 25000],
+      ['sub:gifts', 3000],
+    ]);
+    const pets = first.graph.nodes.find((n) => n.key === 'sub:pets')!;
+    const second = zoomPath(
+      [{ node: other }, { node: { ...pets, group: 'pets' }, categoryIds: first.categoryIds.get('sub:pets') }],
+      transactions,
+      categories,
+    );
+    expect(second.graph.links.map((l) => [l.to, l.cents])).toEqual([
+      ['sub:vet', 20000],
+      ['sub:food', 5000],
+    ]);
+  });
+
+  it('knows which parts can be zoomed into', () => {
+    expect(canZoom('pets', categories)).toBe(true);
+    expect(canZoom('gifts', categories)).toBe(false);
+    expect(canZoom('vet', categories)).toBe(false);
+  });
+});
+
