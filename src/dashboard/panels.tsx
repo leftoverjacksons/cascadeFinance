@@ -120,12 +120,13 @@ function CashFlowBody({ model, fill }: PanelProps) {
   return <ChartCanvas config={config} label="Monthly income and spending" height={fill ? undefined : 240} />;
 }
 
-// ── Spending by group (stacked) ────────────────────────────────────────────
+// ── Spending by group (stacked areas) ──────────────────────────────────────
 function SpendingChartBody({ model, fill }: PanelProps) {
   const { labels, shown, series, groupName } = model;
+  const firstWithData = Math.max(0, shown.findIndex((s) => s.spending !== 0 || s.income !== 0));
   const config = useCallback(
     (c: ChartColors): ChartConfiguration => ({
-      type: 'bar',
+      type: 'line',
       data: {
         labels,
         datasets: series.map((g, i) => {
@@ -133,15 +134,22 @@ function SpendingChartBody({ model, fill }: PanelProps) {
           return {
             label: groupName(g),
             // A month where refunds exceed spending in a group is drawn as zero;
-            // the tooltip and table show the actual (net) amount.
-            data: shown.map((s) => Math.max(0, value(s)) / 100),
+            // the tooltip and table show the actual (net) amount. Months before
+            // the first imported money are left blank, not drawn as $0.
+            data: shown.map((s, m) => (m < firstWithData ? null : Math.max(0, value(s)) / 100)),
             actual: shown.map((s) => value(s) / 100),
             backgroundColor: seriesColor(c, g, i),
-            // 2px surface gap between stacked segments.
+            // Each band fills down to the one below; a 2px surface line separates them.
+            fill: i === 0 ? 'origin' : '-1',
             borderColor: c.surface,
-            borderWidth: { top: 2 },
-            borderSkipped: 'start' as const,
-            categoryPercentage: 0.7,
+            borderWidth: 2,
+            // Straight segments: smoothing would invent values between months.
+            tension: 0,
+            pointRadius: 0,
+            pointHoverRadius: 5,
+            pointHoverBackgroundColor: seriesColor(c, g, i),
+            pointHoverBorderColor: c.surface,
+            pointHoverBorderWidth: 2,
           };
         }),
       },
@@ -161,13 +169,13 @@ function SpendingChartBody({ model, fill }: PanelProps) {
           },
         },
         scales: {
-          x: { ...axes(c, String).x, stacked: true },
+          x: axes(c, String).x,
           y: { ...axes(c, (v) => formatCentsCompact(v * 100)).y, stacked: true, min: 0 },
         },
       },
     }),
     // `model` changes exactly when these fields do.
-    [labels, shown, series, groupName],
+    [labels, shown, series, groupName, firstWithData],
   );
   return <ChartCanvas config={config} label="Monthly spending by category group" height={fill ? undefined : 260} />;
 }
