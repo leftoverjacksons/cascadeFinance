@@ -131,10 +131,12 @@ export default function FlowsPanel(props: PanelProps) {
   const from = model.shown[0]?.month;
   const to = model.data.today;
 
-  // A selection belongs to the period it was made in.
+  // This diagram's own selection (charts can select too); it belongs to the
+  // period it was made in.
+  const own = flow && !flow.origin ? flow : null;
   useEffect(() => {
-    if (flow && (flow.from !== from || flow.to !== to)) onFlow(null);
-  }, [flow, from, to, onFlow]);
+    if (own && (own.from !== from || own.to !== to)) onFlow(null);
+  }, [own, from, to, onFlow]);
 
   useEffect(() => {
     if (!from) return;
@@ -388,10 +390,10 @@ export default function FlowsPanel(props: PanelProps) {
           {showTable ? 'Show diagram' : 'Show as table'}
         </button>
       </div>
-      {flow && (
+      {own && (
         <div className="flows-selection" data-testid="flow-selection">
           <span>
-            <strong>{flow.label}</strong> · {formatCents(flow.cents)}
+            <strong>{own.label}</strong> · {formatCents(own.cents)}
             {transactionsShown && ' · listed in Transactions'}
           </span>
           <button className="link-like" onClick={() => onFlow(null)}>
@@ -437,12 +439,12 @@ export default function FlowsPanel(props: PanelProps) {
           onPositionsChange={(nodes) => setLayout({ nodes })}
           stacks={layout.stacks}
           onStacksChange={(stacks) => setLayout({ stacks })}
-          selected={flow?.key ?? null}
+          selected={own?.key ?? null}
           onSelect={select}
           nodeActions={nodeActions}
         />
       )}
-      {flow && !transactionsShown && (
+      {own && !transactionsShown && (
         <div className="flows-transactions">
           <TransactionsPanel {...props} />
         </div>

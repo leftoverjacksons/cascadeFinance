@@ -38,6 +38,54 @@ test('overview: KPIs, spending table, statement balance and net worth', async ({
   await expect(overview.locator('canvas')).toHaveCount(3);
   await expect(overview.getByTestId('sankey')).toBeVisible();
 
+  // Clicking a chart lists that month's transactions (Transactions panel on
+  // desktop, under the chart on phones).
+  const phone = test.info().project.name === 'phone';
+  const clickMark = async (panel: string, label: string) => {
+    const canvas = overview.locator(`[data-panel=${panel}] canvas`);
+    await canvas.scrollIntoViewIfNeeded();
+    const point = await canvas.evaluate((el, name) => {
+      type El = { x: number; y: number; base?: number };
+      type Meta = { data: El[] };
+      const chart = (el as HTMLCanvasElement & {
+        chart: {
+          data: { datasets: { label: string; data: (number | null)[] }[] };
+          getDatasetMeta: (i: number) => Meta;
+          chartArea: { bottom: number; right: number };
+        };
+      }).chart;
+      const ds = chart.data.datasets.findIndex((d) => d.label === name);
+      const values = chart.data.datasets[ds].data;
+      const i = values.findLastIndex((v) => (v ?? 0) > 0); // the month with data
+      const mark = chart.getDatasetMeta(ds).data[i];
+      const below = mark.base ?? (ds > 0 ? chart.getDatasetMeta(ds - 1).data[i].y : chart.chartArea.bottom);
+      const r = el.getBoundingClientRect();
+      // The newest month sits on the plot's right edge: click just inside it.
+      return { x: r.left + Math.min(mark.x, chart.chartArea.right - 4), y: r.top + (mark.y + below) / 2 };
+    }, label);
+    if (phone) await page.touchscreen.tap(point.x, point.y);
+    else await page.mouse.click(point.x, point.y);
+  };
+  const listFor = (panel: string) => overview.locator(phone ? `[data-panel=${panel}]` : '[data-panel=transactions]');
+
+  await clickMark('cashflow', 'Spending');
+  const spending = listFor('cashflow');
+  await expect(spending.getByTestId('transactions-flow-filter')).toContainText('Spending ·');
+  await expect(spending.getByTestId('transactions-panel')).toContainText('Corner Cafe');
+  await expect(spending.getByTestId('transactions-panel')).toContainText('Hardware, Paint & More');
+  await expect(spending.getByTestId('transactions-panel')).not.toContainText('Example Employer Payroll'); // income
+  await clickMark('cashflow', 'Spending'); // same bar again: cleared
+  await expect(overview.getByTestId('transactions-flow-filter')).toHaveCount(0);
+
+  await clickMark('spending', 'Food & Dining');
+  const food = listFor('spending');
+  await expect(food.getByTestId('transactions-flow-filter')).toContainText('Food & Dining ·');
+  await expect(food.getByTestId('transactions-panel')).toContainText('Corner Cafe');
+  await expect(food.getByTestId('transactions-panel')).not.toContainText('Hardware'); // another group
+  await expect(food.getByTestId('transactions-panel')).not.toContainText('Example Employer Payroll');
+  await food.getByRole('button', { name: 'Show all' }).click();
+  await expect(overview.getByTestId('transactions-flow-filter')).toHaveCount(0);
+
   // Expanding a group shows its categories.
   await overview.getByRole('button', { name: 'Food & Dining: show categories' }).click();
   await expect(overview.getByTestId('group-table')).toContainText('Groceries');

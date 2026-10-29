@@ -77,6 +77,8 @@ export default function ChartCanvas({ config, label, height }: Props) {
     Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
     Chart.defaults.color = colors.text;
     const chart = new Chart(canvas.current, config(colors));
+    // Development only: lets end-to-end tests find where marks are drawn.
+    if (import.meta.env.DEV) (canvas.current as HTMLCanvasElement & { chart?: Chart }).chart = chart;
     return () => chart.destroy();
   }, [config, colors]);
 

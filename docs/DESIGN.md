@@ -342,6 +342,11 @@ Model:
 - Recurring page (sidebar; on phones via the Overview panel) and a Recurring charges panel (monthly total, next 30 days).
 - Checked locally against a real export (not stored in the repository): it finds the expected subscriptions and bills and flags lapsed ones. Known false-positive patterns: two equal charges about a year apart look yearly; habitual weekly visits to one shop look weekly. Both are what "Not recurring" is for.
 
+**Charts (2026-10-29):**
+- Spending by group is a stacked area chart (bands filled down to the one below, 2px surface separators, straight segments; months before the first imported money are blank, not $0).
+- The current month is always partial: on Income and spending its bars are faded with a solid outline, on Spending by group the stretch into it is faded; its tooltip says "Month so far: day N of M". No straight-line projection (large bills land early in the month, so it would mislead).
+- Click a month: an Income or Spending bar lists that month's income or spending; a band in Spending by group lists that group's spending that month (clicking inside a band picks the band containing the pointer). Built from the month's money-flow rows, so lists match the money-flow click-through. Shown in the Transactions panel on desktop, under the chart on phones; the same click again clears it. The selected bar is outlined, the selected band marked with a point. Selections remember which panel made them (`FlowSelection.origin`), so the money-flow panel ignores the charts' selections.
+
 ## 11. Open questions
 
 1. **Credit card samples** (tabled): one export each from Amex, Discover, IKEA card; Member 1's cards, if any.
@@ -409,3 +414,4 @@ Model:
 | 2026-10-28 | Money flow: zoom into a spending node (categories within it) | Household request | Accepted |
 | 2026-10-29 | Money flow zoom continues to merchants below the lowest category | Household request | Accepted |
 | 2026-10-29 | Recurring charges detected in the app from transaction history; household can hide false positives | No extra data to maintain; detection can improve without migrations | Accepted |
+| 2026-10-29 | Spending by group as stacked areas; current month drawn as partial; charts clickable to list a month's transactions | Household request; the partial month otherwise reads as a drop | Accepted |
