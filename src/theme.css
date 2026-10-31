@@ -852,3 +852,7 @@ button.sort {
   max-width: 220px;
   font-size: 0.85rem;
 }
+
+ion-item.undone {
+  opacity: 0.55;
+}

@@ -51,3 +51,29 @@ test('a credit card export imports, and its payment pairs with checking', async 
   await expect(spending).not.toContainText('150'); // the payment
   expect(errors).toEqual([]);
 });
+
+test('an import into the wrong account can be undone, and the file imported into the right one', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await signIn(page, await createUser('undo'));
+  await createHousehold(page, 'Undo Household', 'Alex');
+  await addAccount(page, 'Amex Card', 'American Express', 'Credit card');
+  await addAccount(page, 'Discover Card', 'Discover', 'Credit card');
+
+  // Oops: the Discover export into the Amex account.
+  await importCsv(page, 'Amex Card', { name: 'Discover_Credit_Card.csv', buffer: discover }, '1,200.00');
+  const imports = activePage(page).locator('[data-import]');
+  await expect(imports.first()).toContainText('Amex Card');
+  await imports.first().getByRole('button', { name: 'Undo' }).click();
+  await page.getByRole('button', { name: 'Undo import' }).click();
+  await expect(page.locator('ion-toast')).toContainText('Removed 4 transactions');
+  await expect(imports.first()).toContainText('undone');
+  await expect(imports.first().getByRole('button', { name: 'Undo' })).toHaveCount(0);
+
+  // The same file into the right account.
+  await importCsv(page, 'Discover Card', { name: 'Discover_Credit_Card.csv', buffer: discover });
+  await expect(page.getByTestId('import-result')).toContainText('4 added');
+  await openTab(page, 'transactions');
+  await expect(activePage(page).locator('[data-txn]', { hasText: 'Example Grocer' })).toContainText('Discover Card');
+  expect(errors).toEqual([]);
+});

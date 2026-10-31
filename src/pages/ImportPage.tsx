@@ -17,6 +17,7 @@ import {
   IonText,
   IonTitle,
   IonToolbar,
+  useIonAlert,
   useIonToast,
 } from '@ionic/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -53,6 +54,7 @@ export default function ImportPage() {
   const { household } = useRequiredHousehold();
   const { accounts } = useAccounts();
   const [toast] = useIonToast();
+  const [alert] = useIonAlert();
   const fileInput = useRef<HTMLInputElement>(null);
 
   const [accountId, setAccountId] = useState(readLastAccount);
@@ -83,6 +85,35 @@ export default function ImportPage() {
     void loadHistory();
   }, [loadHistory]);
 
+  // Only an account's most recent remaining import can be undone (imports are undone newest first).
+  const undoable = new Set(
+    [...new Map([...history].reverse().filter((h) => !h.undone_at).map((h) => [h.account_id, h.id])).values()],
+  );
+  function confirmUndo(h: ImportRecord) {
+    void alert({
+      header: 'Undo this import?',
+      message: `Removes the ${h.rows_inserted} transaction${h.rows_inserted === 1 ? '' : 's'} it added to ${accountName(h.account_id)}${
+        h.balance_at_export_cents !== null ? ' and its balance' : ''
+      }. Changes you made to them (categories, notes) are lost. The file is kept and can be imported again.`,
+      buttons: [
+        { text: 'Cancel', role: 'cancel' },
+        {
+          text: 'Undo import',
+          role: 'destructive',
+          handler: () => {
+            void (async () => {
+              const { data, error } = await supabase.rpc('undo_import', { p_import: h.id });
+              if (error) void toast({ message: error.message, duration: 5000, color: 'danger' });
+              else void toast({ message: `Removed ${data} transaction${data === 1 ? '' : 's'}.`, duration: 3000 });
+              await loadHistory();
+              setPreview(null);
+            })();
+          },
+        },
+      ],
+    });
+  }
+
   // Re-run the preview whenever the file or target account changes.
   useEffect(() => {
     setPreview(null);
@@ -96,6 +127,7 @@ export default function ImportPage() {
       .select('*')
       .eq('account_id', accountId)
       .eq('file_sha256', loaded.sha256)
+      .is('undone_at', null)
       .maybeSingle()
       .then(({ data }) => !cancelled && setAlreadyImported(data));
     const key = `${loaded.sha256}:${accountId}`;
@@ -410,9 +442,12 @@ export default function ImportPage() {
               <IonList inset>
                 <IonListHeader>Recent imports</IonListHeader>
                 {history.map((h) => (
-                  <IonItem key={h.id}>
+                  <IonItem key={h.id} data-import={h.id} className={h.undone_at ? 'undone' : undefined}>
                     <IonLabel className="ion-text-wrap">
-                      <h3>{accountName(h.account_id)}</h3>
+                      <h3>
+                        {accountName(h.account_id)}
+                        {h.undone_at && ` · undone ${formatDay(h.undone_at.slice(0, 10))}`}
+                      </h3>
                       <p>
                         {h.original_filename} · exported {formatDay(h.exported_on)}
                         {h.date_min && h.date_max && ` · covers ${h.date_min} to ${h.date_max}`}
@@ -423,6 +458,11 @@ export default function ImportPage() {
                         {h.balance_at_export_cents !== null && ` · balance ${formatCents(h.balance_at_export_cents)}`}
                       </p>
                     </IonLabel>
+                    {undoable.has(h.id) && (
+                      <IonButton slot="end" fill="clear" color="medium" onClick={() => confirmUndo(h)}>
+                        Undo
+                      </IonButton>
+                    )}
                   </IonItem>
                 ))}
               </IonList>

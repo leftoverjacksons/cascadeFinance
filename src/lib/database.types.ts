@@ -169,14 +169,14 @@ isOneToOne: false
                   ]
                 },"imports": {
                   Row: {
-                    "account_id": string,"balance_at_export_cents": number | null,"created_at": string,"date_max": string | null,"date_min": string | null,"exported_on": string,"file_sha256": string,"format": string,"household_id": string,"id": string,"original_filename": string,"pending_replaced": boolean,"rows_duplicate": number,"rows_inserted": number,"rows_pending": number,"rows_skipped": number,"rows_total": number,"storage_path": string,"uploaded_by": string | null
+                    "account_id": string,"balance_at_export_cents": number | null,"created_at": string,"date_max": string | null,"date_min": string | null,"exported_on": string,"file_sha256": string,"format": string,"household_id": string,"id": string,"original_filename": string,"pending_replaced": boolean,"rows_duplicate": number,"rows_inserted": number,"rows_pending": number,"rows_skipped": number,"rows_total": number,"storage_path": string,"undone_at": string | null,"undone_by": string | null,"uploaded_by": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "account_id": string,"balance_at_export_cents"?: number | null,"created_at"?: string,"date_max"?: string | null,"date_min"?: string | null,"exported_on": string,"file_sha256": string,"format": string,"household_id": string,"id"?: string,"original_filename": string,"pending_replaced"?: boolean,"rows_duplicate"?: number,"rows_inserted"?: number,"rows_pending"?: number,"rows_skipped"?: number,"rows_total"?: number,"storage_path": string,"uploaded_by"?: string | null
+                    "account_id": string,"balance_at_export_cents"?: number | null,"created_at"?: string,"date_max"?: string | null,"date_min"?: string | null,"exported_on": string,"file_sha256": string,"format": string,"household_id": string,"id"?: string,"original_filename": string,"pending_replaced"?: boolean,"rows_duplicate"?: number,"rows_inserted"?: number,"rows_pending"?: number,"rows_skipped"?: number,"rows_total"?: number,"storage_path": string,"undone_at"?: string | null,"undone_by"?: string | null,"uploaded_by"?: string | null
                   }
                   Update: {
-                    "account_id"?: string,"balance_at_export_cents"?: number | null,"created_at"?: string,"date_max"?: string | null,"date_min"?: string | null,"exported_on"?: string,"file_sha256"?: string,"format"?: string,"household_id"?: string,"id"?: string,"original_filename"?: string,"pending_replaced"?: boolean,"rows_duplicate"?: number,"rows_inserted"?: number,"rows_pending"?: number,"rows_skipped"?: number,"rows_total"?: number,"storage_path"?: string,"uploaded_by"?: string | null
+                    "account_id"?: string,"balance_at_export_cents"?: number | null,"created_at"?: string,"date_max"?: string | null,"date_min"?: string | null,"exported_on"?: string,"file_sha256"?: string,"format"?: string,"household_id"?: string,"id"?: string,"original_filename"?: string,"pending_replaced"?: boolean,"rows_duplicate"?: number,"rows_inserted"?: number,"rows_pending"?: number,"rows_skipped"?: number,"rows_total"?: number,"storage_path"?: string,"undone_at"?: string | null,"undone_by"?: string | null,"uploaded_by"?: string | null
                   }
                   Relationships: [
                     {
@@ -488,6 +488,9 @@ isOneToOne: false
 { Args: { "p_txn": string }; Returns: {
               "account_id": string,"already_linked": boolean,"amount_cents": number,"display_description": string,"exact_amount": boolean,"gap_days": number,"id": string,"posted_on": string
             }[]
+                           },
+"undo_import":
+{ Args: { "p_import": string }; Returns: number
                            },
 "unlink_transfer":
 { Args: { "p_link": string }; Returns: undefined

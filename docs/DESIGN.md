@@ -261,7 +261,7 @@ Model:
 - Parsing in the browser (PapaParse) via a format registry (`src/import/formats/`); format auto-detected from the header row. Only `usaa_bank` exists so far.
 - Verified on the real 1,641-row USAA export (locally, file not committed): 0 parse errors, 1,633 posted + 8 pending, amount total identical to an independent computation; preview ≈0.2 s, import ≈0.3 s.
 - Tests: 31 pgTAP import tests (idempotency, identical same-day rows, pending replacement and stale-pending, order independence, suspects, skip, validation, isolation); 14 new unit tests; Playwright end-to-end suite (phone + desktop viewports) now runs in CI.
-- Deferred: balance reconciliation between snapshots (pending vs. posted balance semantics need care) → Phase 4. Undo of an import → later.
+- Deferred: balance reconciliation between snapshots (pending vs. posted balance semantics need care) → Phase 4. Undo of an import: done 2026-10-31 (below).
 
 **Phase 3 (done):**
 - Migration `20261027000002_categories.sql`: `categories` (two levels, kind inherited from group, archive instead of delete), `category_rules`, `transactions.category_id` + `category_source` (`none | rule | manual`), RPCs `preview_category_rule` and `set_transaction_category`.
@@ -354,6 +354,8 @@ Model:
 - Categorisation (`private.seed_rules_v3`, existing and new households; re-runnable): "…PAYMENT - THANK YOU" → Transfers › Credit Card Payments; interest charges, late fees and membership fees → Financial › Fees & Charges; Discover's categories mapped (Payments and Credits → Credit Card Payments, Balance Transfers → Transfers › Between Accounts (moving debt is not spending), Fees/Interest → Fees & Charges, and its purchase categories onto ours). A merchant refund on Discover also falls under "Payments and Credits"; recategorise it if one shows up.
 - Checked locally against the household's two real card exports (not stored): every row parses. Still to come: the IKEA card (no sample yet).
 
+**Undo an import (2026-10-31, after a file was imported into the wrong card account):** "Undo" on the Import page's history, for each account's most recent remaining import (imports are undone newest first: a later import may have skipped rows as already present because an earlier one added them). `public.undo_import` removes the transactions that import added (each records its `import_id`) and its balance-at-export, re-runs transfer matching (links to removed rows go with them), and marks the import `undone_at`. The import record and original file are kept for audit; the one-file-per-account rule applies only to imports not undone, so the file can be imported again. Edits to the removed transactions (categories, notes) are lost; pending rows an import replaced are not restored. `imports.created_at` now takes the clock time, so "newest" is well defined.
+
 ## 11. Open questions
 
 1. **Credit card samples** (tabled): one export each from Amex, Discover, IKEA card; Member 1's cards, if any.
@@ -424,3 +426,4 @@ Model:
 | 2026-10-29 | Spending by group as stacked areas; current month drawn as partial; charts clickable to list a month's transactions | Household request; the partial month otherwise reads as a drop | Accepted |
 | 2026-10-31 | "Same as" merchant aliases for recurring charges | A renamed service otherwise shows as one stopped and one new subscription | Accepted |
 | 2026-10-31 | Card exports' amounts flipped on import; card payments are transfers | One sign convention across accounts; payments pair with checking instead of counting as spending twice | Accepted |
+| 2026-10-31 | Undo an import (newest first; record and file kept) | A file imported into the wrong account had no remedy | Accepted |
