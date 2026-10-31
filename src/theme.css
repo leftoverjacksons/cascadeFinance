@@ -845,3 +845,10 @@ button.sort {
   max-width: 320px;
   margin-bottom: 8px;
 }
+
+.recurring-same-as {
+  display: inline-block;
+  margin-left: 8px;
+  max-width: 220px;
+  font-size: 0.85rem;
+}

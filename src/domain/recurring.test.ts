@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectRecurring, type RecurringInput } from './recurring';
+import { detectRecurring, resolver, type RecurringInput } from './recurring';
 
 let n = 0;
 const txn = (posted_on: string, dollars: number, display_description: string, account_id = 'chk'): RecurringInput => ({
@@ -149,6 +149,33 @@ describe('detectRecurring', () => {
     const old = monthly('OldApp', 9.99, ['2025-03', '2025-04', '2025-05', '2025-06']);
     expect(detectRecurring(old, '2026-10-01')).toEqual([]);
     expect(detectRecurring(old, '2026-05-01')[0].overdue).toBe(true); // within the year: "may have stopped"
+  });
+
+  it('treats a renamed merchant as the same one when told ("same as")', () => {
+    // Billed as "Widget.ai Subscription" until May, then as "Acme.com".
+    const charges = [
+      ...['2026-01', '2026-02', '2026-03', '2026-04', '2026-05'].map((m) => txn(`${m}-06`, 20, 'Widget.ai Subscription')),
+      ...['2026-06', '2026-07', '2026-08', '2026-09', '2026-10'].map((m) => txn(`${m}-06`, 20, 'Acme.com')),
+    ];
+    const apart = detectRecurring(charges, '2026-10-10');
+    expect(apart.map((s) => [s.merchantKey, s.overdue])).toEqual(
+      expect.arrayContaining([
+        ['widget', true],
+        ['acme', false],
+      ]),
+    );
+    const [one, ...rest] = detectRecurring(charges, '2026-10-10', new Map([['widget', 'acme']]));
+    expect(rest).toEqual([]);
+    expect(one).toMatchObject({ merchantKey: 'acme', aliases: ['widget'], overdue: false });
+    expect(one.transactions).toHaveLength(10);
+  });
+});
+
+describe('resolver', () => {
+  it('follows chains of "same as" and stops at loops', () => {
+    expect(resolver(new Map([['a', 'b'], ['b', 'c']]))('a')).toBe('c');
+    expect(resolver(new Map([['a', 'b'], ['b', 'a']]))('a')).toBe('a');
+    expect(resolver(new Map())('a')).toBe('a');
   });
 });
 

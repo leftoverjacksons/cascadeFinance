@@ -50,8 +50,10 @@ const MIN_VARYING = 6;
 export interface RecurringSeries {
   /** Unique per series (a merchant can have several, e.g. one per person). */
   key: string;
-  /** The merchant (merchantKey); what "not recurring" hides. */
+  /** The merchant (merchantKey, after "same as"); what "not recurring" hides. */
   merchantKey: string;
+  /** Merchant names merged into this one by "same as" that appear in the series. */
+  aliases: string[];
   label: string;
   cadence: Cadence;
   /** Typical charge (median), positive cents. */
@@ -135,12 +137,14 @@ function chains(txns: RecurringInput[], spec: CadenceSpec): RecurringInput[][] {
 export function detectRecurring(
   transactions: RecurringInput[],
   asOf: string | ((accountId: string) => string),
+  sameAs: Map<string, string> = new Map(),
 ): RecurringSeries[] {
   const dataUntil = typeof asOf === 'string' ? () => asOf : asOf;
+  const resolve = resolver(sameAs);
   const byMerchant = new Map<string, RecurringInput[]>();
   for (const t of transactions) {
     if (t.amount_cents >= 0) continue;
-    const key = merchantKey(t.display_description);
+    const key = resolve(merchantKey(t.display_description));
     if (!key) continue;
     byMerchant.set(key, [...(byMerchant.get(key) ?? []), t]);
   }
@@ -191,6 +195,7 @@ export function detectRecurring(
       out.push({
         key: kept.length > 1 ? `${key}~${n}` : key,
         merchantKey: key,
+        aliases: [...new Set(chain.map((t) => merchantKey(t.display_description)))].filter((k) => k !== key),
         label: mode(chain.map((t) => t.display_description.trim())),
         cadence: spec.cadence,
         typicalCents,
@@ -216,3 +221,19 @@ export const CADENCE_LABELS: Record<Cadence, string> = {
   quarterly: 'Quarterly',
   yearly: 'Yearly',
 };
+
+/**
+ * Follows "same as" links (a -> b -> c) to the merchant a name finally stands
+ * for. A loop (which the page never creates) stops where it would repeat.
+ */
+export function resolver(sameAs: Map<string, string>): (key: string) => string {
+  return (key) => {
+    const seen = new Set<string>();
+    while (sameAs.has(key) && !seen.has(key)) {
+      seen.add(key);
+      key = sameAs.get(key)!;
+    }
+    return key;
+  };
+}
+

@@ -219,6 +219,26 @@ isOneToOne: false
       referencedColumns: ["household_id","user_id"]
     }
                   ]
+                },"merchant_aliases": {
+                  Row: {
+                    "created_at": string,"created_by": string | null,"household_id": string,"merchant_key": string,"same_as": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"created_by"?: string | null,"household_id": string,"merchant_key": string,"same_as": string
+                  }
+                  Update: {
+                    "created_at"?: string,"created_by"?: string | null,"household_id"?: string,"merchant_key"?: string,"same_as"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "merchant_aliases_household_id_fkey"
+      columns: ["household_id"]
+isOneToOne: false
+      referencedRelation: "households"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"recurring_dismissals": {
                   Row: {
                     "created_at": string,"created_by": string | null,"household_id": string,"merchant_key": string

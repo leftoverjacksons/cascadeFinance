@@ -51,3 +51,49 @@ test('recurring charges are found, explained, and can be marked not recurring', 
   await expect(activePage(page).getByTestId('recurring-Active')).toContainText('Netflix');
   expect(errors).toEqual([]);
 });
+
+const renamed = Buffer.from(
+  [
+    'Date,Description,Original Description,Category,Amount,Status',
+    // One subscription, billed under a new name from July.
+    '2026-04-06,"Widget.ai Subscription","WIDGET.AI SUBSCRIPTION",Software,-20.00,Posted',
+    '2026-05-06,"Widget.ai Subscription","WIDGET.AI SUBSCRIPTION",Software,-20.00,Posted',
+    '2026-06-06,"Widget.ai Subscription","WIDGET.AI SUBSCRIPTION",Software,-20.00,Posted',
+    '2026-07-06,"Acme.com","ACME.COM",Software,-20.00,Posted',
+    '2026-08-06,"Acme.com","ACME.COM",Software,-20.00,Posted',
+    '2026-09-06,"Acme.com","ACME.COM",Software,-20.00,Posted',
+    '2026-10-06,"Acme.com","ACME.COM",Software,-20.00,Posted',
+  ].join('\n') + '\n',
+);
+
+test('a renamed merchant can be marked "same as" the new name, and undone', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await signIn(page, await createUser('alias'));
+  await createHousehold(page, 'Alias Household', 'Alex');
+  await addAccount(page, 'Main Checking');
+  await importCsv(page, 'Main Checking', { name: 'bk_download.csv', buffer: renamed });
+  await openTab(page, 'overview');
+  await activePage(page).getByTestId('recurring-panel').getByRole('link', { name: 'All recurring charges' }).click();
+  const recurring = activePage(page);
+
+  // Apart: the old name looks stopped, the new one active.
+  await expect(recurring.getByTestId('recurring-May have stopped')).toContainText('Widget.ai Subscription');
+  await expect(recurring.getByTestId('recurring-Active')).toContainText('Acme.com');
+
+  // Same as: one active subscription with both names.
+  await recurring.locator('[data-recurring="widget"]').click();
+  await recurring.locator('.recurring-same-as').click();
+  await page.locator('ion-popover').getByText('Acme.com').click();
+  await expect(recurring.getByTestId('recurring-May have stopped')).toHaveCount(0);
+  await recurring.locator('[data-recurring="acme"]').click();
+  await expect(recurring.getByTestId('recurring-aliases')).toContainText('Also billed as Widget.ai Subscription');
+  await expect(recurring.getByTestId('recurring-details')).toContainText('7 charges since');
+
+  // Undo: apart again (and it was saved: survives a reload first).
+  await page.reload();
+  await activePage(page).locator('[data-recurring="acme"]').click();
+  await activePage(page).getByTestId('recurring-aliases').getByRole('button', { name: 'Undo' }).click();
+  await expect(activePage(page).getByTestId('recurring-May have stopped')).toContainText('Widget.ai Subscription');
+  expect(errors).toEqual([]);
+});

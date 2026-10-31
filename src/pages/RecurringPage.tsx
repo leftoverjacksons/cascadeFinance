@@ -9,6 +9,8 @@ import {
   IonList,
   IonListHeader,
   IonNote,
+  IonSelect,
+  IonSelectOption,
   IonPage,
   IonRefresher,
   IonRefresherContent,
@@ -22,6 +24,7 @@ import { Fragment, useState } from 'react';
 import { categoryLabel } from '../domain/categories';
 import { formatDay } from '../domain/dates';
 import { formatCents, formatCentsWhole } from '../domain/money';
+import { merchantKey } from '../domain/flows';
 import { CADENCE_LABELS, type RecurringSeries } from '../domain/recurring';
 import { useAccounts } from '../household/useAccounts';
 import { useCategories } from '../household/useCategories';
@@ -32,7 +35,7 @@ const SHOW_CHARGES = 12;
 
 /** Recurring charges: subscriptions, bills and other money out on a regular cadence. */
 export default function RecurringPage() {
-  const { series, hidden, error, refresh, dismiss } = useRecurring();
+  const { series, hidden, error, refresh, dismiss, setSameAs } = useRecurring();
   const { byId } = useCategories();
   const { accounts } = useAccounts();
   const [open, setOpen] = useState<string | null>(null);
@@ -61,6 +64,16 @@ export default function RecurringPage() {
   const nextText = (s: RecurringSeries) => (s.overdue ? `expected ${formatDay(s.next)}` : formatDay(s.next));
 
   /** Past charges and the "not recurring" control, shown under an opened series. */
+  // Merchants a series can be said to be the "same as": every other one found.
+  const merchants = [...new Map([...(series ?? []), ...hidden].map((x) => [x.merchantKey, x.label]))];
+  async function sameAs(key: string, target: string | null) {
+    const message = await setSameAs(key, target);
+    if (message) void toast({ message, duration: 4000, color: 'danger' });
+  }
+  /** How a merged name appears on its charges. */
+  const shownName = (s: RecurringSeries, alias: string) =>
+    s.transactions.find((t) => merchantKey(t.display_description) === alias)?.display_description ?? alias;
+
   const details = (s: RecurringSeries, isHidden: boolean) => (
     <div className="recurring-details" data-testid="recurring-details">
       <p className="caption">
@@ -72,14 +85,46 @@ export default function RecurringPage() {
           {s.transactions.slice(0, SHOW_CHARGES).map((t) => (
             <tr key={t.id}>
               <td>{formatDay(t.posted_on)}</td>
+              {s.aliases.length > 0 && <td>{t.display_description}</td>}
               <td>{formatCents(-t.amount_cents)}</td>
             </tr>
           ))}
         </tbody>
       </table>
+      {s.aliases.length > 0 && (
+        <p className="caption" data-testid="recurring-aliases">
+          Also billed as{' '}
+          {s.aliases.map((alias) => (
+            <Fragment key={alias}>
+              <strong>{shownName(s, alias)}</strong>{' '}
+              <IonButton size="small" fill="clear" onClick={() => void sameAs(alias, null)}>
+                Undo
+              </IonButton>
+            </Fragment>
+          ))}
+        </p>
+      )}
       <IonButton size="small" fill="outline" color="medium" onClick={() => void setRecurring(s, !isHidden)}>
         {isHidden ? 'Show again' : 'Not recurring'}
       </IonButton>
+      {merchants.length > 1 && (
+        <IonSelect
+          className="recurring-same-as"
+          interface="popover"
+          placeholder="Same as…"
+          aria-label={`${s.label} is the same as`}
+          value={null}
+          onIonChange={(e) => e.detail.value && void sameAs(s.merchantKey, e.detail.value as string)}
+        >
+          {merchants
+            .filter(([key]) => key !== s.merchantKey)
+            .map(([key, label]) => (
+              <IonSelectOption key={key} value={key}>
+                {label}
+              </IonSelectOption>
+            ))}
+        </IonSelect>
+      )}
       {!isHidden && (series ?? []).filter((x) => x.merchantKey === s.merchantKey).length > 1 && (
         <IonNote className="hint"> Hides every series from this merchant.</IonNote>
       )}
