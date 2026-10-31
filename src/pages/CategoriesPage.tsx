@@ -30,6 +30,10 @@ export default function CategoriesPage() {
   const { categories, refresh } = useCategories();
   const [showArchived, setShowArchived] = useState(false);
   const [alert] = useIonAlert();
+  // A second dialog controller: the kind step of "Add group" must not share
+  // one with the name step (an Ionic alert hook manages one dialog at a time,
+  // and closing the first would close the second).
+  const [kindAlert] = useIonAlert();
   const [actions] = useIonActionSheet();
   const [toast] = useIonToast();
 
@@ -58,45 +62,49 @@ export default function CategoriesPage() {
     });
   }
 
+  // Two steps (name, then kind), each with its own dialog controller; the
+  // second opens once the first has closed. (Sharing one controller made the
+  // second dialog close as soon as it opened, so nothing happened.)
   function addGroup() {
     void alert({
       header: 'New group',
-      inputs: [
-        { name: 'name', placeholder: 'Name', attributes: { maxlength: 60 } },
-      ],
+      inputs: [{ name: 'name', placeholder: 'Name', attributes: { maxlength: 60 } }],
       buttons: [
         { text: 'Cancel', role: 'cancel' },
         {
           text: 'Next',
-          handler: (d: { name: string }) => {
-            if (!d.name.trim()) return false;
-            void alert({
-              header: 'What kind of money?',
-              inputs: (Object.keys(KIND_LABELS) as CategoryKind[]).map((k, i) => ({
-                type: 'radio' as const,
-                label: KIND_LABELS[k],
-                value: k,
-                checked: i === 0,
-              })),
-              buttons: [
-                { text: 'Cancel', role: 'cancel' },
-                {
-                  text: 'Create',
-                  handler: (kind: CategoryKind) =>
-                    void run(
-                      supabase.from('categories').insert({
-                        household_id: household.id,
-                        name: d.name.trim(),
-                        kind,
-                        sort_order: tree.length + 1,
-                      }),
-                    ),
-                },
-              ],
-            });
-          },
+          role: 'confirm',
+          handler: (d: { name: string }) => (d.name.trim() ? undefined : false),
         },
       ],
+      onDidDismiss: (e) => {
+        const name = (e.detail.data?.values?.name as string | undefined)?.trim();
+        if (e.detail.role !== 'confirm' || !name) return;
+        void kindAlert({
+          header: `What kind of money is "${name}"?`,
+          inputs: (Object.keys(KIND_LABELS) as CategoryKind[]).map((k, i) => ({
+            type: 'radio' as const,
+            label: KIND_LABELS[k],
+            value: k,
+            checked: i === 0,
+          })),
+          buttons: [
+            { text: 'Cancel', role: 'cancel' },
+            {
+              text: 'Create',
+              handler: (kind: CategoryKind) =>
+                void run(
+                  supabase.from('categories').insert({
+                    household_id: household.id,
+                    name,
+                    kind,
+                    sort_order: tree.length + 1,
+                  }),
+                ),
+            },
+          ],
+        });
+      },
     });
   }
 

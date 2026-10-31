@@ -76,3 +76,45 @@ test('automatic categories, manual override with a rule, bulk edit, rule editor'
   await openTab(page, 'transactions');
   await expect(row('Example Employer Payroll')).toContainText('Income › Other Income');
 });
+
+test('a new group can be created, and categories added to it', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await signIn(page, await createUser('catgroup'));
+  await createHousehold(page, 'Group Household', 'Alex');
+  await page.goto('./#/settings/categories');
+  const cats = activePage(page);
+  await expect(cats.getByText('Food & Dining').first()).toBeVisible();
+
+  // New group: name, then kind (two dialogs, one after the other).
+  await cats.getByRole('button', { name: 'Add group' }).click();
+  await page.locator('ion-alert input').fill('Kids');
+  await page.locator('ion-alert').getByRole('button', { name: 'Next' }).click();
+  const kind = page.locator('ion-alert', { hasText: 'What kind of money is "Kids"?' });
+  await expect(kind).toBeVisible();
+  await kind.getByRole('radio', { name: 'Spending', exact: true }).click();
+  await kind.getByRole('button', { name: 'Create' }).click();
+  const kids = cats.locator('ion-list', { has: page.getByRole('button', { name: 'Kids', exact: true }) });
+  await expect(kids).toBeVisible();
+
+  // A category in it, with the group's Add button...
+  await kids.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.locator('ion-alert input').fill('Daycare');
+  await page.locator('ion-alert').getByRole('button', { name: 'Save' }).click();
+  await expect(kids).toContainText('Daycare');
+
+  // ...and from the group's menu.
+  await kids.getByRole('button', { name: 'Kids', exact: true }).click();
+  await page.locator('ion-action-sheet').getByRole('button', { name: 'Add category' }).click();
+  await page.locator('ion-alert input').fill('School');
+  await page.locator('ion-alert').getByRole('button', { name: 'Save' }).click();
+  await expect(kids).toContainText('School');
+
+  // Cancelling the name step creates nothing.
+  await cats.getByRole('button', { name: 'Add group' }).click();
+  await page.locator('ion-alert input').fill('Nope');
+  await page.locator('ion-alert').getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator('ion-alert')).toHaveCount(0);
+  await expect(cats.getByRole('button', { name: 'Nope', exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
