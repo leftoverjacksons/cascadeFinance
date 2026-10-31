@@ -1,8 +1,9 @@
 import Papa from 'papaparse';
+import { amexCard, discoverCard } from './formats/cards';
 import { usaaBank } from './formats/usaa';
 import type { ImportFormat, NormalizedRow, ParseResult, RowError } from './types';
 
-export const FORMATS: ImportFormat[] = [usaaBank];
+export const FORMATS: ImportFormat[] = [usaaBank, amexCard, discoverCard];
 
 export class UnrecognisedFormatError extends Error {
   constructor(public readonly header: string[]) {
@@ -28,7 +29,7 @@ export function parseCsv(text: string, formats: ImportFormat[] = FORMATS): Parse
     const record = Object.fromEntries(header.map((h, j) => [h.trim(), cells[j]]));
     const result = format.parseRecord(record);
     if (typeof result === 'string') errors.push({ line, message: result });
-    else rows.push(result);
+    else if (result) rows.push(result);
   });
   return { format, rows, errors };
 }

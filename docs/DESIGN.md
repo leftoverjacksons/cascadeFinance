@@ -234,7 +234,7 @@ Model:
 | 2 — Import ✅ | USAA format, parser, preview, dedup RPC, import history, invariants as automated tests. |
 | 3 — Categorise ✅ | Category tree, rules engine, manual edit, bulk recategorise. (Transfer *pair linking* moved to 5a, where settlements need it.) |
 | 4 — Overview ✅ | Transactions list (search/filter), monthly cash flow, spending by category, balances, net worth. |
-| 5 — More formats | Credit card formats, savings, loans + balance snapshots. |
+| 5 — More formats | American Express and Discover ✅ (2026-10-31). IKEA card: awaiting a sample. |
 | 5a — Shared expenses ✅ | Part 1: transfer linking + money-flow Sankey. Part 2: shared expenses, paybacks (direct and via joint), recorded payments, member balance. |
 | 6 — Budgets & trends | Recurring-charge detection ✅ (2026-10-29). Per-category monthly targets vs actuals: after ~2–3 months of categorised data. |
 | 7 — Mobile polish | PWA install, offline read cache, phone-first import flow. (No separate native app planned.) |
@@ -349,6 +349,11 @@ Model:
 - The current month is always partial: on Income and spending its bars are faded with a solid outline, on Spending by group the stretch into it is faded; its tooltip says "Month so far: day N of M". No straight-line projection (large bills land early in the month, so it would mislead).
 - Click a month: an Income or Spending bar lists that month's income or spending; a band in Spending by group lists that group's spending that month (clicking inside a band picks the band containing the pointer). Built from the month's money-flow rows, so lists match the money-flow click-through. Shown in the Transactions panel on desktop, under the chart on phones; the same click again clears it. The selected bar is outlined, the selected band marked with a point. Selections remember which panel made them (`FlowSelection.origin`), so the money-flow panel ignores the charts' selections.
 
+**Phase 5: credit card formats (2026-10-31):**
+- American Express (`Date,Description,Amount`) and Discover (`Trans. Date,Post Date,Description,Amount,Category`), recognised from the header row. Both list charges as positive amounts; the importer flips them to the app's convention (negative = money out of the account, positive = a payment to the card), so card payments pair with the debit from checking. MM/DD/YYYY dates; Discover's post date is used. No status (all posted) and no balance in the files; the import form's "amount owed when exported" records the balance. $0.00 notices (e.g. "first late payment, no fee") are skipped, not reported as errors. American Express descriptions are a fixed 20-character merchant field followed by city and state: the display name keeps the merchant part; the full text stays the raw description. All-capitals names are shown in title case.
+- Categorisation (`private.seed_rules_v3`, existing and new households; re-runnable): "…PAYMENT - THANK YOU" → Transfers › Credit Card Payments; interest charges, late fees and membership fees → Financial › Fees & Charges; Discover's categories mapped (Payments and Credits → Credit Card Payments, Balance Transfers → Transfers › Between Accounts (moving debt is not spending), Fees/Interest → Fees & Charges, and its purchase categories onto ours). A merchant refund on Discover also falls under "Payments and Credits"; recategorise it if one shows up.
+- Checked locally against the household's two real card exports (not stored): every row parses. Still to come: the IKEA card (no sample yet).
+
 ## 11. Open questions
 
 1. **Credit card samples** (tabled): one export each from Amex, Discover, IKEA card; Member 1's cards, if any.
@@ -418,3 +423,4 @@ Model:
 | 2026-10-29 | Recurring charges detected in the app from transaction history; household can hide false positives | No extra data to maintain; detection can improve without migrations | Accepted |
 | 2026-10-29 | Spending by group as stacked areas; current month drawn as partial; charts clickable to list a month's transactions | Household request; the partial month otherwise reads as a drop | Accepted |
 | 2026-10-31 | "Same as" merchant aliases for recurring charges | A renamed service otherwise shows as one stopped and one new subscription | Accepted |
+| 2026-10-31 | Card exports' amounts flipped on import; card payments are transfers | One sign convention across accounts; payments pair with checking instead of counting as spending twice | Accepted |

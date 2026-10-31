@@ -20,8 +20,11 @@ export interface ImportFormat {
   label: string;
   /** True if this format recognises the file's header row. */
   matches(header: string[]): boolean;
-  /** Converts one data record (header-keyed) to a row, or returns an error message. */
-  parseRecord(record: Record<string, string>): NormalizedRow | string;
+  /**
+   * Converts one data record (header-keyed) to a row, returns an error
+   * message, or null for a row with nothing to record (e.g. a $0.00 notice).
+   */
+  parseRecord(record: Record<string, string>): NormalizedRow | string | null;
 }
 
 export interface ParseResult {

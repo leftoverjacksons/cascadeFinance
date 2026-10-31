@@ -25,7 +25,7 @@ import { formatCents, parseAmountToCents } from '../domain/money';
 import { useRequiredHousehold } from '../household/HouseholdProvider';
 import { useAccounts } from '../household/useAccounts';
 import { previewImport, runImport, type ImportSummary, type PreviewRow } from '../import/importFile';
-import { parseCsv, sha256Hex, UnrecognisedFormatError } from '../import/parse';
+import { FORMATS, parseCsv, sha256Hex, UnrecognisedFormatError } from '../import/parse';
 import type { ParseResult } from '../import/types';
 import type { Database } from '../lib/database.types';
 import { supabase } from '../lib/supabase';
@@ -120,7 +120,7 @@ export default function ImportPage() {
     } catch (e) {
       const message =
         e instanceof UnrecognisedFormatError
-          ? 'This file format is not supported yet. Supported: USAA checking/savings.'
+          ? `This file format is not supported yet. Supported: ${FORMATS.map((f) => f.label).join(', ')}.`
           : `Could not read the file: ${(e as Error).message}`;
       void toast({ message, duration: 6000, color: 'danger' });
     } finally {
@@ -211,7 +211,7 @@ export default function ImportPage() {
                 <IonItem>
                   <IonLabel>
                     <h3>CSV file</h3>
-                    <p>{loaded ? loaded.file.name : 'USAA: bk_download.csv'}</p>
+                    <p>{loaded ? loaded.file.name : `A .csv export: ${FORMATS.map((f) => f.label).join(', ')}`}</p>
                   </IonLabel>
                   <IonButton slot="end" onClick={() => fileInput.current?.click()} disabled={busy}>
                     Choose file
