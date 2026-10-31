@@ -146,3 +146,32 @@ test('deleting a category unassigns its transactions; transfer categories cannot
   await expect(cafes).toHaveCount(2);
   for (const r of await cafes.all()) await expect(r).toContainText('Uncategorized');
 });
+
+test('a category can be moved to another group, keeping its transactions', async ({ page }) => {
+  await signIn(page, await createUser('catmove'));
+  await createHousehold(page, 'Move Household', 'Alex');
+  await addAccount(page, 'Main Checking');
+  await importCsv(page, 'Main Checking', { name: 'bk_download.csv', buffer: sample });
+
+  await page.goto('./#/settings/categories');
+  const cats = activePage(page);
+  const group = (name: string) => cats.locator('ion-list', { has: page.getByRole('button', { name, exact: true }) });
+  await group('Food & Dining').locator('ion-item', { hasText: 'Coffee Shops' }).click();
+  await page.locator('ion-action-sheet').getByRole('button', { name: 'Move to group…' }).click();
+  const dialog = page.locator('ion-alert', { hasText: 'Move "Coffee Shops" to…' });
+  await dialog.getByRole('radio', { name: 'Other', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Move' }).click();
+  await expect(group('Other')).toContainText('Coffee Shops');
+  await expect(group('Food & Dining')).not.toContainText('Coffee Shops');
+
+  // Transfer categories are only offered transfer groups (there is just one).
+  await expect(page.locator('ion-action-sheet, ion-alert')).toHaveCount(0);
+  await group('Transfers').locator('ion-item', { hasText: 'Between Accounts' }).click();
+  await page.locator('ion-action-sheet').getByRole('button', { name: 'Move to group…' }).click();
+  await expect(page.getByText('There is no other group to move it to.')).toBeVisible();
+
+  await openTab(page, 'transactions');
+  const cafes = page.getByTestId('transactions').locator('[data-txn]', { hasText: 'Corner Cafe' });
+  await expect(cafes).toHaveCount(2);
+  for (const r of await cafes.all()) await expect(r).toContainText('Other › Coffee Shops');
+});

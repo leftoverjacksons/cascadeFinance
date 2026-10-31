@@ -196,6 +196,7 @@ After insert, a matcher proposes pairs across the household's accounts: opposite
 - **Rules** are ordered; first match wins. Match on raw description (contains / starts with / regex), optionally constrained by account and amount range. Rules can also rewrite the display name ("SQ *REVOLUTION DOUGHNUT…" → "Revolution Doughnut").
 - **Learning loop:** when a user recategorises a transaction, offer "apply to all similar and create rule". Re-running rules over history is an explicit action with a preview of affected rows.
 - **Archive or delete.** Archiving hides a category from pickers and keeps its history. Deleting (a group: with its categories) unassigns its transactions, manual ones included, then the remaining rules categorise them again; rules that set it are removed (`delete_category`). Transfer categories cannot be deleted, because transfer linking assigns them.
+- **Moving** a category to another group keeps its transactions and rules, and gives it the new group's kind. Transfer categories are only offered other transfer groups.
 - **Splits** (one Amazon order across categories): deferred; schema should not preclude a `transaction_splits` table later.
 
 ## 9. Liabilities: mortgage and auto loan
@@ -428,4 +429,4 @@ Model:
 | 2026-10-31 | "Same as" merchant aliases for recurring charges | A renamed service otherwise shows as one stopped and one new subscription | Accepted |
 | 2026-10-31 | Card exports' amounts flipped on import; card payments are transfers | One sign convention across accounts; payments pair with checking instead of counting as spending twice | Accepted |
 | 2026-10-31 | Undo an import (newest first; record and file kept) | A file imported into the wrong account had no remedy | Accepted |
-| 2026-10-31 | Categories can be deleted, not only archived; their transactions are re-offered to the rules | Household request; archived categories still held transactions the household wanted elsewhere | Accepted |
+| 2026-10-31 | Categories can be moved between groups, and deleted, not only archived; their transactions are re-offered to the rules | Household request; archived categories still held transactions the household wanted elsewhere | Accepted |

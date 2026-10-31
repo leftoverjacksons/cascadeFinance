@@ -35,6 +35,7 @@ export default function CategoriesPage() {
   // and closing the first would close the second).
   const [kindAlert] = useIonAlert();
   const [deleteAlert] = useIonAlert();
+  const [moveAlert] = useIonAlert();
   const [actions] = useIonActionSheet();
   const [toast] = useIonToast();
 
@@ -151,6 +152,50 @@ export default function CategoriesPage() {
     });
   }
 
+  /**
+   * Moves a category into another group. Its transactions and rules keep
+   * pointing at it; it takes the new group's kind (the database enforces
+   * this). Transfer categories stay among transfer groups, where transfer
+   * linking looks for them.
+   */
+  function move(c: Category) {
+    const groups = tree
+      .map((g) => g.group)
+      .filter((g) => g.id !== c.parent_id && !g.is_archived && (c.kind !== 'transfer' || g.kind === 'transfer'));
+    if (groups.length === 0) {
+      void toast({ message: 'There is no other group to move it to.', duration: 3000 });
+      return;
+    }
+    void moveAlert({
+      header: `Move "${c.name}" to…`,
+      message: 'Its transactions and rules come with it. It takes on the new group\'s kind (spending, income or transfer).',
+      inputs: groups.map((g, i) => ({
+        type: 'radio' as const,
+        label: g.kind === 'expense' ? g.name : `${g.name} (${g.kind})`,
+        value: g.id,
+        checked: i === 0,
+      })),
+      buttons: [
+        { text: 'Cancel', role: 'cancel' },
+        {
+          text: 'Move',
+          handler: (groupId: string) => {
+            const target = groups.find((g) => g.id === groupId);
+            if (!target) return;
+            // All its categories, archived ones included (names are unique per group).
+            const children = categories.filter((x) => x.parent_id === groupId);
+            if (children.some((x) => x.name.trim().toLowerCase() === c.name.trim().toLowerCase())) {
+              void toast({ message: `${target.name} already has a category called "${c.name}".`, duration: 4000, color: 'danger' });
+              return;
+            }
+            const sort_order = Math.max(0, ...children.map((x) => x.sort_order)) + 1;
+            void run(supabase.from('categories').update({ parent_id: groupId, sort_order }).eq('id', c.id));
+          },
+        },
+      ],
+    });
+  }
+
   function edit(c: Category, isGroup: boolean, childCount: number) {
     void actions({
       header: c.name,
@@ -193,6 +238,7 @@ export default function CategoriesPage() {
               },
             ]
           : [
+              { text: 'Move to group…', handler: () => move(c) },
               {
                 text: c.is_shared ? 'Stop sharing by default' : 'Shared with partner by default',
                 handler: () => void run(supabase.from('categories').update({ is_shared: !c.is_shared }).eq('id', c.id)),
