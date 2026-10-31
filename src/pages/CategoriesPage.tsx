@@ -34,6 +34,7 @@ export default function CategoriesPage() {
   // one with the name step (an Ionic alert hook manages one dialog at a time,
   // and closing the first would close the second).
   const [kindAlert] = useIonAlert();
+  const [deleteAlert] = useIonAlert();
   const [actions] = useIonActionSheet();
   const [toast] = useIonToast();
 
@@ -118,6 +119,38 @@ export default function CategoriesPage() {
     );
   }
 
+  /**
+   * Deletes a category (a group: with its categories) after saying how many
+   * transactions it holds. They become uncategorised, and the remaining rules
+   * get another go at them; rules that set it are removed.
+   */
+  async function confirmDelete(c: Category, isGroup: boolean) {
+    const ids = [c.id, ...(isGroup ? categories.filter((x) => x.parent_id === c.id).map((x) => x.id) : [])];
+    const { count, error } = await supabase
+      .from('transactions')
+      .select('id', { count: 'exact', head: true })
+      .in('category_id', ids);
+    if (error) return void toast({ message: error.message, duration: 4000, color: 'danger' });
+    const n = count ?? 0;
+    const what = isGroup && ids.length > 1 ? `"${c.name}" and its ${ids.length - 1} categories` : `"${c.name}"`;
+    void deleteAlert({
+      header: `Delete ${what}?`,
+      message:
+        (n === 0
+          ? 'No transactions use it.'
+          : `${n} transaction${n === 1 ? '' : 's'} will become uncategorised, then your other rules get another go at them.`) +
+        ' Rules that set it are removed. This cannot be undone; Archive hides it instead.',
+      buttons: [
+        { text: 'Cancel', role: 'cancel' },
+        {
+          text: 'Delete',
+          role: 'destructive',
+          handler: () => void run(supabase.rpc('delete_category', { p_category: c.id })),
+        },
+      ],
+    });
+  }
+
   function edit(c: Category, isGroup: boolean, childCount: number) {
     void actions({
       header: c.name,
@@ -165,6 +198,9 @@ export default function CategoriesPage() {
                 handler: () => void run(supabase.from('categories').update({ is_shared: !c.is_shared }).eq('id', c.id)),
               },
             ]),
+        ...(c.kind === 'transfer'
+          ? []
+          : [{ text: 'Delete…', role: 'destructive', handler: () => void confirmDelete(c, isGroup) }]),
         {
           text: c.is_archived ? 'Restore' : 'Archive',
           role: c.is_archived ? undefined : 'destructive',

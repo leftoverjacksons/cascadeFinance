@@ -415,6 +415,9 @@ isOneToOne: false
 "create_household":
 { Args: { "p_display_name": string,"p_name": string }; Returns: string
                            },
+"delete_category":
+{ Args: { "p_category": string }; Returns: number
+                           },
 "import_batch":
 { Args: { "p_account_id": string,"p_balance_cents"?: number,"p_exported_on": string,"p_file_sha256": string,"p_format": string,"p_original_filename": string,"p_rows": Json,"p_skip"?: (number)[],"p_storage_path": string }; Returns: Json
                            },

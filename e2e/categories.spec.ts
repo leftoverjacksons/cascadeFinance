@@ -118,3 +118,31 @@ test('a new group can be created, and categories added to it', async ({ page }) 
   await expect(cats.getByRole('button', { name: 'Nope', exact: true })).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+test('deleting a category unassigns its transactions; transfer categories cannot be deleted', async ({ page }) => {
+  await signIn(page, await createUser('catdelete'));
+  await createHousehold(page, 'Delete Household', 'Alex');
+  await addAccount(page, 'Main Checking');
+  await importCsv(page, 'Main Checking', { name: 'bk_download.csv', buffer: sample });
+
+  await page.goto('./#/settings/categories');
+  const cats = activePage(page);
+  await cats.locator('ion-item', { hasText: 'Coffee Shops' }).click();
+  await page.locator('ion-action-sheet').getByRole('button', { name: 'Delete…' }).click();
+  const confirm = page.locator('ion-alert', { hasText: 'Delete "Coffee Shops"?' });
+  await expect(confirm).toContainText('2 transactions will become uncategorised');
+  await confirm.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(cats.locator('ion-item', { hasText: 'Coffee Shops' })).toHaveCount(0);
+
+  // The transfer categories have no Delete (transfer linking assigns them).
+  await expect(page.locator('ion-action-sheet, ion-alert')).toHaveCount(0);
+  await cats.locator('ion-item', { hasText: 'Between Accounts' }).click();
+  await expect(page.locator('ion-action-sheet').getByRole('button', { name: 'Archive' })).toBeVisible();
+  await expect(page.locator('ion-action-sheet').getByRole('button', { name: 'Delete…' })).toHaveCount(0);
+  await page.locator('ion-action-sheet').getByRole('button', { name: 'Cancel' }).click();
+
+  await openTab(page, 'transactions');
+  const cafes = page.getByTestId('transactions').locator('[data-txn]', { hasText: 'Corner Cafe' });
+  await expect(cafes).toHaveCount(2);
+  for (const r of await cafes.all()) await expect(r).toContainText('Uncategorized');
+});
